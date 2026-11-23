@@ -60,3 +60,15 @@ export const fmtEp = (r: { season: number | null; episode: number | null; absolu
   r.season != null && r.episode != null
     ? `S${String(r.season).padStart(2, "0")}E${String(r.episode).padStart(2, "0")}`
     : r.absolute_episode != null ? `Ep ${r.absolute_episode}` : "";
+
+export interface AppField {
+  key: string; label: string; group: string; kind: "text" | "url" | "secret" | "bool" | "int" | "float" | "select";
+  help: string; options: string[]; danger: boolean; source: "db" | "env";
+  value?: string | number | boolean; set?: boolean; unreadable?: boolean;
+}
+export interface VpnForm {
+  provider: string; type: string; countries: string; port_forwarding: boolean; wireguard_addresses: string;
+  wireguard_private_key: string; openvpn_user: string; openvpn_password: string;
+  wireguard_private_key_set?: boolean; openvpn_password_set?: boolean;
+}
+export interface BrowseResult { path: string; parent: string | null; dirs: string[]; roots: string[]; absolute: boolean }

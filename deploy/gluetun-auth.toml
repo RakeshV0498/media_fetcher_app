@@ -1,5 +1,16 @@
-# Read-only access for the node agent to gluetun's control server (no auth, LAN/compose network only).
+# gluetun control-server access for the node agent.
+# 1) Status (read-only, no auth) - used by the VPN health gate.
 [[roles]]
-name = "agent"
+name = "status"
 routes = ["GET /v1/vpn/status", "GET /v1/openvpn/status", "GET /v1/publicip/ip"]
 auth = "none"
+
+# 2) Settings (read/write) - used when the admin changes VPN provider settings in the web UI.
+#    These contain your VPN credentials, so they require an API key. Generate one with:
+#       openssl rand -base64 24
+#    then put the SAME value here and as GLUETUN_API_KEY in node.env.
+[[roles]]
+name = "settings"
+routes = ["GET /v1/vpn/settings", "PUT /v1/vpn/settings"]
+auth = "apikey"
+apikey = "REPLACE_WITH_GENERATED_KEY"

@@ -4,16 +4,14 @@ import { Icon, IconName } from "./ui";
 import { Login } from "./pages/Login";
 import { Queue } from "./pages/Queue";
 import { Sources } from "./pages/Sources";
-import { Tags } from "./pages/Tags";
 import { Downloads } from "./pages/Downloads";
-import { Nodes } from "./pages/Nodes";
+import { SettingsPage } from "./pages/Settings";
 
 const PAGES = {
   Queue: { C: Queue, icon: "inbox" as IconName, label: "Review" },
   Downloads: { C: Downloads, icon: "download" as IconName, label: "Downloads" },
   Sources: { C: Sources, icon: "rss" as IconName, label: "Sources" },
-  Tags: { C: Tags, icon: "tag" as IconName, label: "Tags" },
-  Nodes: { C: Nodes, icon: "server" as IconName, label: "Nodes" },
+  Settings: { C: SettingsPage, icon: "settings" as IconName, label: "Settings" },
 };
 type PageName = keyof typeof PAGES;
 

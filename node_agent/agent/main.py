@@ -11,6 +11,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
+from app.postprocess.browse import browse, make_dir
 from app.postprocess.mover import NeedsAttention, PathNotAllowed, cleanup_empty, file_release
 
 GLUETUN_URL = os.environ.get("GLUETUN_URL", "http://gluetun:8000")
@@ -110,3 +111,113 @@ def postprocess(b: PostProcess) -> dict[str, list]:
         cleanup_empty(Path(b.content_path))
     return {"moved": [[str(a), str(d)] for a, d in res.moved],
             "duplicates": [str(p) for p in res.duplicates], "skipped": [str(p) for p in res.skipped]}
+
+
+# ---------------- folder browsing (never outside MEDIA_ROOTS) ----------------
+@app.get("/browse")
+def browse_dirs(path: str = "") -> dict:
+    try:
+        return browse(path, _roots("MEDIA_ROOTS"))
+    except PathNotAllowed as e:
+        raise HTTPException(403, str(e)) from e
+    except NotADirectoryError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+class MkDir(BaseModel):
+    path: str
+
+
+@app.post("/mkdir")
+def mkdir(b: MkDir) -> dict[str, str]:
+    try:
+        return make_dir(b.path, _roots("MEDIA_ROOTS"))
+    except PathNotAllowed as e:
+        raise HTTPException(403, str(e)) from e
+
+
+# ---------------- VPN provider settings -> gluetun control API ----------------
+GLUETUN_API_KEY_ENV = "GLUETUN_API_KEY"
+
+
+class VpnSettings(BaseModel):
+    provider: str | None = None
+    type: str | None = None  # wireguard | openvpn
+    countries: list[str] | None = None
+    port_forwarding: bool | None = None
+    wireguard_private_key: str | None = None
+    wireguard_addresses: list[str] | None = None
+    openvpn_user: str | None = None
+    openvpn_password: str | None = None
+
+
+def merge_vpn(current: dict, v: VpnSettings) -> dict:
+    """Merge our fields into gluetun's own settings document (so unknown fields are preserved)."""
+    import copy
+    doc = copy.deepcopy(current) if current else {}
+    vpn = doc.setdefault("vpn", {})
+    prov = vpn.setdefault("provider", {})
+    sel = prov.setdefault("server_selection", {})
+    if v.type:
+        vpn["type"] = v.type
+    if v.provider:
+        prov["name"] = v.provider
+    if v.countries is not None:
+        sel["countries"] = v.countries
+    if v.port_forwarding is not None:
+        prov.setdefault("port_forwarding", {})["enabled"] = v.port_forwarding
+    wg, ov = vpn.setdefault("wireguard", {}), vpn.setdefault("openvpn", {})
+    if v.wireguard_private_key:
+        wg["private_key"] = v.wireguard_private_key
+    if v.wireguard_addresses is not None:
+        wg["addresses"] = v.wireguard_addresses
+    if v.openvpn_user:
+        ov["user"] = v.openvpn_user
+    if v.openvpn_password:
+        ov["password"] = v.openvpn_password
+    return doc
+
+
+def _gluetun_headers() -> dict[str, str]:
+    key = os.environ.get(GLUETUN_API_KEY_ENV, "")
+    if not key:
+        raise HTTPException(503, f"{GLUETUN_API_KEY_ENV} is not configured on this node (see deploy/gluetun-auth.toml)")
+    return {"X-API-Key": key}
+
+
+def _public_vpn_view(doc: dict) -> dict:
+    vpn = doc.get("vpn", {})
+    prov = vpn.get("provider", {})
+    return {"provider": prov.get("name"), "type": vpn.get("type"),
+            "countries": prov.get("server_selection", {}).get("countries"),
+            "port_forwarding": prov.get("port_forwarding", {}).get("enabled"),
+            "wireguard_private_key_set": bool(vpn.get("wireguard", {}).get("private_key")),
+            "openvpn_user": vpn.get("openvpn", {}).get("user")}
+
+
+@app.get("/vpn/settings")
+def vpn_settings_get() -> dict:
+    with httpx.Client(timeout=10) as http:
+        try:
+            r = http.get(f"{GLUETUN_URL}/v1/vpn/settings", headers=_gluetun_headers())
+            r.raise_for_status()
+            return _public_vpn_view(r.json())
+        except httpx.HTTPError as e:
+            raise HTTPException(502, f"gluetun settings API: {e}") from e
+
+
+@app.put("/vpn/settings")
+def vpn_settings_put(v: VpnSettings) -> dict:
+    with httpx.Client(timeout=15) as http:
+        try:
+            h = _gluetun_headers()
+            cur = http.get(f"{GLUETUN_URL}/v1/vpn/settings", headers=h)
+            cur.raise_for_status()
+            r = http.put(f"{GLUETUN_URL}/v1/vpn/settings", headers=h, json=merge_vpn(cur.json(), v))
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(502, f"gluetun rejected the settings ({e.response.status_code}): "
+                                     f"{e.response.text[:200]}") from e
+        except httpx.HTTPError as e:
+            raise HTTPException(502, f"gluetun settings API: {e}") from e
+    return {"applied": True}

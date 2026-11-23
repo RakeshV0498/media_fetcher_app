@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
   "fastapi", "uvicorn", "sqlalchemy>=2", "alembic", "apscheduler",
   "httpx", "beautifulsoup4", "lxml", "feedparser", "guessit",
-  "pydantic-settings", "argon2-cffi", "itsdangerous",
+  "pydantic-settings", "argon2-cffi", "itsdangerous", "cryptography",
 ]
 [project.optional-dependencies]
 dev = ["pytest", "respx"]

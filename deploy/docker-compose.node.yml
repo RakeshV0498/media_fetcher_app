@@ -45,6 +45,7 @@ services:
       MEDIA_ROOTS: ${MEDIA_ROOTS:?comma-separated final media roots}
       DOWNLOAD_ROOTS: ${DOWNLOAD_ROOTS:-${DOWNLOADS_DIR:-/mnt/downloads}}
       GLUETUN_URL: http://gluetun:8000
+      GLUETUN_API_KEY: ${GLUETUN_API_KEY:-}
     volumes:
       - ${DOWNLOADS_DIR:-/mnt/downloads}:${DOWNLOADS_DIR:-/mnt/downloads}
       # One line per media disk on this Pi (same path inside and out), e.g.:

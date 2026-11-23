@@ -63,3 +63,21 @@ Run `docker compose -f deploy/docker-compose.yml run --rm controller python -m a
 line (`AUTH_PASSWORD_HASH='$argon2id$...'`) into `.env`. **Keep the single quotes** - Docker Compose otherwise
 interpolates the `$` characters and mangles the hash. After any `.env` change run
 `docker compose -f deploy/docker-compose.yml up -d --force-recreate`.
+
+## Settings page (admin)
+After signing in, **Settings** holds everything you would otherwise put in `.env`, grouped in tabs:
+General · Integrations (TMDB, Jellyfin) · Telegram · Downloads · Libraries (tag → node → folder, with a folder browser)
+· Nodes & VPN · Security (username, change password). Changes apply immediately, no restart.
+
+- Values saved in the UI live in the database and **override `.env`**; "reset" on a field restores the `.env` value.
+  Secrets are encrypted with a key derived from `APP_SECRET`, are never sent back to the browser (shown as
+  "saved"), and become unreadable if `APP_SECRET` changes (re-enter them). `.env` still needs `APP_SECRET`,
+  `DATABASE_URL` and the first `AUTH_PASSWORD_HASH`.
+- Folder browsing happens on the node itself and is limited to that Pi's `MEDIA_ROOTS` (set in its `node.env`;
+  deliberately not editable remotely, it is the security boundary). You can create new sub-folders there.
+- **VPN provider settings** (per node) are pushed by the node agent to gluetun's settings API, so no SSH or restart.
+  One-time setup per Pi: generate a key (`openssl rand -base64 24`), put it in `deploy/gluetun-auth.toml`
+  (`apikey = ...`) and as `GLUETUN_API_KEY` in `node.env`. Gluetun still needs a valid first-time VPN config in
+  `node.env` to start at all; afterwards you can change it from the UI. This path needs a recent gluetun and has
+  **not been tested against a real gluetun yet** - use *Save & apply* on one node and confirm the Nodes tab shows
+  "VPN protected" before relying on it.

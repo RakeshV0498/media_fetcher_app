@@ -9,12 +9,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import auth as auth_api
-from .api import downloads, misc, releases, sources, tags
+from .api import app_settings, downloads, misc, releases, sources, tags
 from .auth import require_user
 from .config import settings
 from .db import SessionLocal
 from .notify import telegram
 from .scanner import scheduler
+from . import settings_store
 from .seed import seed
 
 
@@ -45,6 +46,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     migrate()
     with SessionLocal() as db:
         seed(db)
+        settings_store.apply_overrides(db)
     scheduler.start()
     scheduler.scheduler.add_job(releases.unsnooze_due, "interval", minutes=5,
                                 id="unsnooze", replace_existing=True)
@@ -61,7 +63,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Media Fetcher", lifespan=lifespan)
 app.include_router(auth_api.router)
 _protected = [Depends(require_user)]
-for _r in (sources.router, tags.router, releases.router, downloads.router, misc.router):
+for _r in (app_settings.router, sources.router, tags.router, releases.router, downloads.router, misc.router):
     app.include_router(_r, dependencies=_protected)
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from datetime import datetime, timezone
 from html import escape
 
@@ -105,13 +106,13 @@ def process_update(db: Session, http: httpx.Client, update: dict) -> None:
               message_id=cb["message"]["message_id"], reply_markup={"inline_keyboard": []})
 
 
-_stop = threading.Event()
+_gen = 0  # bumped on every (re)start so superseded poll threads exit
 
 
-def poll_loop() -> None:
+def poll_loop(gen: int) -> None:
     offset = 0
     with httpx.Client() as http:
-        while not _stop.is_set():
+        while _gen == gen:
             try:
                 res = _call(http, "getUpdates", offset=offset, timeout=25, allowed_updates=["callback_query"])
                 for u in res.get("result", []):
@@ -119,14 +120,16 @@ def poll_loop() -> None:
                     with SessionLocal() as db:
                         process_update(db, http, u)
             except httpx.HTTPError:
-                _stop.wait(10)
+                time.sleep(10)
 
 
 def start() -> None:
+    global _gen
+    _gen += 1
     if settings.telegram_enabled and settings.telegram_bot_token and settings.telegram_chat_id:
-        _stop.clear()
-        threading.Thread(target=poll_loop, daemon=True, name="telegram").start()
+        threading.Thread(target=poll_loop, args=(_gen,), daemon=True, name="telegram").start()
 
 
 def stop() -> None:
-    _stop.set()
+    global _gen
+    _gen += 1

@@ -71,3 +71,30 @@ class AgentClient:
         return MoveResult(moved=[(Path(a), Path(b)) for a, b in d["moved"]],
                           duplicates=[Path(p) for p in d["duplicates"]],
                           skipped=[Path(p) for p in d["skipped"]])
+
+    # ---- folder browsing (limited by the agent to its MEDIA_ROOTS) ----
+    def browse(self, path: str = "") -> dict:
+        r = self._call("GET", "/browse", params={"path": path})
+        if r.status_code != 200:
+            raise AgentError(r.json().get("detail", f"browse failed ({r.status_code})") if r.headers.get(
+                "content-type", "").startswith("application/json") else f"browse failed ({r.status_code})")
+        return r.json()
+
+    def mkdir(self, path: str) -> dict:
+        r = self._call("POST", "/mkdir", json={"path": path})
+        if r.status_code != 200:
+            raise AgentError(r.json().get("detail", f"mkdir failed ({r.status_code})"))
+        return r.json()
+
+    # ---- VPN provider settings (pushed to gluetun by the agent) ----
+    def vpn_settings_get(self) -> dict:
+        r = self._call("GET", "/vpn/settings")
+        if r.status_code != 200:
+            raise AgentError(r.json().get("detail", f"agent returned {r.status_code}"))
+        return r.json()
+
+    def vpn_settings_apply(self, values: dict) -> dict:
+        r = self._call("PUT", "/vpn/settings", json=values)
+        if r.status_code != 200:
+            raise AgentError(r.json().get("detail", f"agent returned {r.status_code}"))
+        return r.json()
