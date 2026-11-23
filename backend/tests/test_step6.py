@@ -393,3 +393,32 @@ def test_require_vpn_defaults_off_and_is_an_editable_setting(api_client):
     assert fields["require_vpn"]["group"] == "downloads" and fields["require_vpn"]["value"] is False
     api_client.put("/api/app-settings", json={"values": {"require_vpn": True}})
     assert settings.require_vpn is True
+
+
+@respx.mock
+def test_qbit_login_accepts_204_from_newer_versions():
+    respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(204))
+    respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
+    respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(200, json={"success_count": 1, "failure_count": 0}))
+    c = QBittorrentClient(QB, "u", "p")
+    assert c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d").startswith("mf-")      # 204 login, JSON add result
+
+
+@respx.mock
+def test_qbit_login_unexpected_status_is_reported_with_the_code():
+    respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(500, text="boom"))
+    with pytest.raises(RuntimeError, match=r"HTTP 500: boom"):
+        QBittorrentClient(QB, "u", "p")._login()
+
+
+@respx.mock
+def test_qbit_add_json_failure_is_an_error_but_204_is_fine():
+    respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(204))
+    respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
+    add = respx.post(f"{QB}/api/v2/torrents/add").mock(
+        return_value=httpx.Response(200, json={"success_count": 0, "failure_count": 1, "pending_count": 0}))
+    c = QBittorrentClient(QB, "u", "p")
+    with pytest.raises(RuntimeError, match="rejected the torrent"):
+        c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d")
+    add.mock(return_value=httpx.Response(204))
+    assert c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d").startswith("mf-")

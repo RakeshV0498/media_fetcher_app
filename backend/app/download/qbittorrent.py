@@ -35,7 +35,8 @@ class QBittorrentClient:
                                "restart the qbittorrent container (docker restart deploy-qbittorrent-1) and try again")
         if r.status_code == 200 and r.text.strip() == "Fails.":
             raise RuntimeError("qBittorrent rejected the username or password (the same login is used for every node)")
-        if r.status_code != 200 or r.text.strip() != "Ok.":
+        # Success is 200 "Ok." on older qBittorrent and 204 No Content on newer releases.
+        if not (r.status_code == 204 or (r.status_code == 200 and r.text.strip() == "Ok.")):
             raise RuntimeError(f"qBittorrent login failed (HTTP {r.status_code}: {r.text.strip()[:80] or 'no body'})")
         self._logged_in = True
         self._configure()
@@ -76,8 +77,15 @@ class QBittorrentClient:
         r = self._req("POST", "/api/v2/torrents/add", data={
             "urls": uri, "category": category, "savepath": save_path, "tags": tag,
             "ratioLimit": 0, "seedingTimeLimit": 0, "autoTMM": "false"})
-        if r.status_code != 200 or "Fails" in r.text:
+        if r.status_code not in (200, 204) or "Fails" in r.text:
             raise RuntimeError(f"qBittorrent rejected the torrent ({r.status_code}: {r.text[:100]})")
+        try:  # newer versions answer with JSON counts instead of "Ok."
+            counts = r.json()
+        except ValueError:
+            counts = None
+        if isinstance(counts, dict) and counts.get("failure_count", 0) and not counts.get("success_count", 0) \
+                and not counts.get("pending_count", 0):
+            raise RuntimeError("qBittorrent rejected the torrent (is it a duplicate or an invalid link?)")
         return tag
 
     def status(self, client_id: str) -> Progress | None:
