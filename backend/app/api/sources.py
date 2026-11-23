@@ -94,6 +94,54 @@ def scan(sid: int, db: Session = Depends(get_db)) -> dict[str, str]:
     return {"status": scan_now(sid)}
 
 
+class AnalyzeIn(BaseModel):
+    kind: str = "listing"  # listing | detail
+    url: str | None = None
+    html: str | None = None  # pasted page source (for sites that block scrapers, need a login or JavaScript)
+    site_url: str | None = None  # the source's listing URL; a detail URL must be on the same host
+    user_agent: str = ""
+
+
+MAX_PAGE_BYTES = 4_000_000
+
+
+@router.post("/analyze")
+def analyze_page(body: AnalyzeIn) -> dict:
+    """Propose selector configs for a page (auto-detect). Nothing is saved; the UI shows previews to pick from."""
+    from urllib.parse import urlparse
+
+    import httpx
+
+    from ..config import settings
+    from ..scanner.analyze import analyze_detail, analyze_listing
+    if body.kind not in ("listing", "detail"):
+        raise HTTPException(422, "kind must be 'listing' or 'detail'")
+    html, base = body.html, body.url or body.site_url or ""
+    if not html:
+        if not body.url or not body.url.startswith(("http://", "https://")):
+            raise HTTPException(422, "give a page URL (http/https) or paste the page HTML")
+        if body.kind == "detail" and body.site_url and (urlparse(body.url).hostname or "") != (urlparse(body.site_url).hostname or ""):
+            raise HTTPException(400, "the detail page must be on the same site as the source")
+        try:
+            with httpx.Client(headers={"User-Agent": body.user_agent or settings.user_agent}, timeout=20,
+                              follow_redirects=True) as c:
+                r = c.get(body.url)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            hint = (" The site is probably blocking automated access: open it in your browser, save/copy the page source "
+                    "and use 'Paste page HTML'." if e.response.status_code in (401, 403, 429, 503) else "")
+            raise HTTPException(502, f"the site answered HTTP {e.response.status_code}.{hint}") from e
+        except httpx.HTTPError as e:
+            raise HTTPException(502, f"could not fetch the page: {e}") from e
+        if len(r.content) > MAX_PAGE_BYTES:
+            raise HTTPException(413, "that page is too large to analyze")
+        html = r.text
+    if len(html) > MAX_PAGE_BYTES:
+        raise HTTPException(413, "that page is too large to analyze")
+    cands, warnings = (analyze_detail if body.kind == "detail" else analyze_listing)(html, base)
+    return {"candidates": [c.as_dict() for c in cands], "warnings": warnings, "kind": body.kind}
+
+
 @router.post("/discover")
 def discover(url: str) -> dict[str, str | None]:
     class _S:

@@ -40,7 +40,14 @@ def fetch_html(client: httpx.Client, url: str, sel: dict[str, str]) -> list[RawI
         raise ValueError(NO_SELECTORS_MSG)
     r = client.get(url)
     r.raise_for_status()
-    soup = BeautifulSoup(r.text, "lxml")
+    return parse_html(r.text, url, sel)
+
+
+def parse_html(html: str, url: str, sel: dict[str, str]) -> list[RawItem]:
+    """Apply a selector config to a page's HTML (the same code path scans and the auto-detector use)."""
+    if not sel.get("item") or not sel.get("title"):
+        raise ValueError(NO_SELECTORS_MSG)
+    soup = BeautifulSoup(html, "lxml")
     try:
         title_re = re.compile(sel["title_regex"]) if sel.get("title_regex") else None
         nodes = soup.select(sel["item"])

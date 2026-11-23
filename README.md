@@ -120,3 +120,14 @@ the detail page:
 A scan only reads the listing and creates the entries. When you want one, press **Load versions** on its card: only that
 one detail page is fetched, and the resolutions then appear (ranked by seeders) to pick from. Detail pages are only fetched
 from the source's own host.
+
+## Auto-detect selectors (sites without a feed)
+In **Sources → Add source**, enter the site's listing URL and press **Analyze page**. The assistant finds the repeating list
+of entries and works out the selectors for title, link, magnet / `.torrent`, size and seeders (table headers like `SE`/`LE`,
+class names, size patterns), then **previews what a scan would extract** so you can check it before using it.
+- If the entries carry no download links (each title has its own page), it says so and offers **Step 2**: give any one
+  entry's page and it detects the resolution blocks and fills in the `detail` part.
+- Sites that block scrapers, need a login or build the list with JavaScript: use **Paste page HTML** (copy the page source
+  with Ctrl+U in your browser).
+- It cannot separate versions that are not wrapped in similar blocks, and it cannot read JavaScript-only pages. The proposal
+  is always shown as JSON you can edit before saving.

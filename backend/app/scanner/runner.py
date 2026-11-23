@@ -46,7 +46,7 @@ def add_variant(db: Session, source: Source, rel: Release, item: RawItem) -> boo
         db.add(Variant(
             release_id=rel.id, source_id=source.id, ident=ident, title=item.title,
             quality=p.quality, codec=p.codec, language=p.language,
-            size_bytes=parse_size(item.size_text), seeders=item.seeders,
+            size_bytes=parse_size(item.size_text) or parse_size(item.title), seeders=item.seeders,
             leechers=item.leechers, magnet=item.magnet, torrent_url=item.torrent_url,
             link=item.link))
         return True

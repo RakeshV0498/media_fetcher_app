@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, Source } from "../api";
 import type { ToastFn } from "../App";
+import { SelectorAssistant } from "../components/SelectorAssistant";
 import { Empty, Icon, PageHead } from "../ui";
 
 const EMPTY = { name: "", url: "", mode: "auto", interval_minutes: 60, cron: "", user_agent: "", selectors: "{}" };
@@ -60,6 +61,11 @@ export function Sources({ notify }: { notify: ToastFn }) {
             <label className="field">Scan every (minutes)<input type="number" min={1} value={form.interval_minutes} onChange={(e) => set({ interval_minutes: Number(e.target.value) })} /></label>
             <label className="field">Cron <span className="hint">overrides interval</span><input className="mono" placeholder="*/30 * * * *" value={form.cron} onChange={(e) => set({ cron: e.target.value })} /></label>
             <label className="field">User-Agent <span className="hint">blank = default</span><input value={form.user_agent} onChange={(e) => set({ user_agent: e.target.value })} /></label>
+            <div className="field wide">
+              <SelectorAssistant url={form.url} userAgent={form.user_agent} notify={notify}
+                current={(() => { try { return JSON.parse(form.selectors || "{}"); } catch { return {}; } })()}
+                onApply={(sel) => { set({ selectors: JSON.stringify(sel, null, 2), mode: form.mode === "feed" ? "html" : form.mode }); }} />
+            </div>
             <label className="field wide">HTML selectors (JSON) <button type="button" className="link inline" onClick={() => set({ selectors: SEL_EXAMPLE })}>Insert example</button>
               <button type="button" className="link inline" onClick={() => set({ selectors: SEL_TWO_LEVEL })}>Insert two-level example</button>
               <span className="hint">Needs <span className="mono">item</span> and <span className="mono">title</span>. Optional: link, torrent, magnet, size, seeders, leechers, date, <span className="mono">title_regex</span> (keeps the first group of the match as the title). For sites where each title has its own page with the versions, add a <span className="mono">detail</span> block (same keys) and a <span className="mono">link</span> to the page.</span>
