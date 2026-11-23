@@ -454,3 +454,24 @@ def test_missing_qbit_url_is_a_clear_error(db, real_setup, monkeypatch):
     tag.node.qbit_url = ""
     with pytest.raises(service.ApproveError, match="no qBittorrent URL"):
         service.approve(db, rel.id, var.id, tag.id)
+
+
+@respx.mock
+def test_qbit_5_queued_add_with_http_202_is_success():
+    """Real response seen from qBittorrent 5.3.0 for a magnet that still needs metadata."""
+    respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(204))
+    respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
+    add = respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(
+        202, json={"added_torrent_ids": [], "failure_count": 0, "pending_count": 1, "success_count": 0}))
+    cid = QBittorrentClient(QB, "u", "p").add("magnet:?xt=urn:btih:abc", "english-movies", "/mnt/dl/english-movies")
+    assert cid.startswith("mf-") and cid in add.calls[0].request.content.decode()
+
+
+@respx.mock
+def test_qbit_202_without_anything_pending_is_still_a_failure():
+    respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(204))
+    respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
+    respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(
+        202, json={"added_torrent_ids": [], "failure_count": 1, "pending_count": 0, "success_count": 0}))
+    with pytest.raises(RuntimeError, match="rejected the torrent"):
+        QBittorrentClient(QB, "u", "p").add("magnet:?xt=urn:btih:abc", "tv", "/mnt/dl/tv")

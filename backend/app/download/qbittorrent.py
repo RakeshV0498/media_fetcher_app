@@ -77,7 +77,8 @@ class QBittorrentClient:
         r = self._req("POST", "/api/v2/torrents/add", data={
             "urls": uri, "category": category, "savepath": save_path, "tags": tag,
             "ratioLimit": 0, "seedingTimeLimit": 0, "autoTMM": "false"})
-        if r.status_code not in (200, 204) or "Fails" in r.text:
+        # 200 "Ok." / 204 (older), or 202 with pending_count>0 (qBittorrent 5.x: queued, still fetching metadata).
+        if r.status_code not in (200, 202, 204) or "Fails" in r.text:
             raise RuntimeError(f"qBittorrent rejected the torrent ({r.status_code}: {r.text[:100]})")
         try:  # newer versions answer with JSON counts instead of "Ok."
             counts = r.json()
