@@ -71,6 +71,7 @@ def test_blocked_gate_leaves_release_new(client, data, session_factory, monkeypa
         is_mock = False
     monkeypatch.setattr(service, "_client", Real())
     monkeypatch.setattr(settings, "downloads_enabled", False)
+    monkeypatch.setattr(settings, "require_vpn", True)
     r = client.post(f"/api/releases/{data['r1']}/approve",
                     json={"variant_id": data["vs"][0], "tag_id": data["tv"]})
     assert r.status_code == 409 and "disabled" in r.json()["detail"]

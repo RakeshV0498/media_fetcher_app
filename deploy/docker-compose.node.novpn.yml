@@ -1,0 +1,40 @@
+# Download node WITHOUT a VPN (qBittorrent talks to the internet directly - your home IP is visible to peers).
+# Run:  docker compose -f deploy/docker-compose.node.novpn.yml --env-file deploy/node.env up -d --build
+# To use a VPN later, switch to docker-compose.node.yml (gluetun + kill switch) and turn on
+# Settings -> Downloads -> "Require VPN to download".
+services:
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      WEBUI_PORT: 8080
+      TZ: ${TZ:-UTC}
+    ports:
+      - "8080:8080"      # WebUI (LAN)
+      - "6881:6881"      # BitTorrent
+      - "6881:6881/udp"
+    volumes:
+      - qbit-config:/config
+      # Mount host paths at the SAME path inside the container as the agent sees them:
+      - ${DOWNLOADS_DIR:-/mnt/downloads}:${DOWNLOADS_DIR:-/mnt/downloads}
+    restart: unless-stopped
+
+  agent:
+    build: {context: .., dockerfile: node_agent/Dockerfile}
+    environment:
+      NODE_AGENT_TOKEN: ${NODE_AGENT_TOKEN:?set NODE_AGENT_TOKEN in node.env}
+      MEDIA_ROOTS: ${MEDIA_ROOTS:?comma-separated library folders on this Pi}
+      DOWNLOAD_ROOTS: ${DOWNLOAD_ROOTS:-${DOWNLOADS_DIR:-/mnt/downloads}}
+    volumes:
+      - ${DOWNLOADS_DIR:-/mnt/downloads}:${DOWNLOADS_DIR:-/mnt/downloads}
+      # One line per library disk on this Pi, same path inside and out. For example:
+      #   Pi 5 (movies):   - /Media_Server/05:/Media_Server/05
+      #   Pi 4 (TV/anime): - /cloud/01:/cloud/01      - /cloud/02:/cloud/02
+      # - /Media_Server/05:/Media_Server/05
+    ports:
+      - "8800:8800"      # controller -> agent (LAN only; protected by NODE_AGENT_TOKEN)
+    restart: unless-stopped
+
+volumes:
+  qbit-config:

@@ -51,7 +51,7 @@ export interface Download {
 }
 export interface NodeInfo {
   id: number; name: string; agent_url: string; qbit_url: string; download_dir: string; max_concurrent: number;
-  vpn_ok: boolean; vpn: string; public_ip: string | null; home_ip: string | null;
+  vpn_ok: boolean; vpn_required: boolean; vpn: string; public_ip: string | null; home_ip: string | null;
 }
 
 export const fmtSize = (b: number | null) =>

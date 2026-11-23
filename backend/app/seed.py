@@ -7,12 +7,12 @@ from .models import Node, Setting, Source, Tag
 NODES = ["pi5", "pi4"]
 # (name, kind, node, category, final_path)
 TAGS = [
-    ("Tamil Movie", "movie", "pi5", "tamil-movies", "/media/movies/Tamil"),
-    ("English Movie", "movie", "pi5", "english-movies", "/media/movies/English"),
-    ("Dubbed Movie", "movie", "pi5", "dubbed-movies", "/media/movies/Dubbed"),
-    ("Indian Language Movie", "movie", "pi5", "indian-movies", "/media/movies/Indian"),
-    ("TV Show", "tv", "pi4", "tv", "/media/tv"),
-    ("Anime", "anime", "pi4", "anime", "/media/anime"),
+    ("Tamil Movie", "movie", "pi5", "tamil-movies", "/Media_Server/05/Tamil Movies"),
+    ("English Movie", "movie", "pi5", "english-movies", "/Media_Server/05/English Movies"),
+    ("Dubbed Movie", "movie", "pi5", "dubbed-movies", "/Media_Server/05/Dubbed Movies"),
+    ("Indian Language Movie", "movie", "pi5", "indian-movies", "/Media_Server/05/Indian Language Movies"),
+    ("TV Show", "tv", "pi4", "tv", "/cloud/01"),
+    ("Anime", "anime", "pi4", "anime", "/cloud/02/Anime"),
 ]
 
 

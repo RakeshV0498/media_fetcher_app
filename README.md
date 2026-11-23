@@ -29,7 +29,17 @@ Downloads page and it is filed; existing files are never overwritten (*duplicate
   Only your chat id is obeyed, and Approve uses the same download gate as the web UI
   (it needs a suggested tag; otherwise pick it in the web UI).
 
-## Download nodes (VPN + qBittorrent) — one stack per Pi
+## Download nodes (qBittorrent, VPN optional) — one stack per Pi
+**A VPN is optional.** Without one, use `deploy/docker-compose.node.novpn.yml` (qBittorrent + agent, no gluetun) and leave
+*Settings → Downloads → Require VPN to download* **off** (the default); your home IP is then visible to peers. Later you can
+switch to the gluetun stack below and turn *Require VPN* on to refuse any download unless the VPN check passes.
+
+Quick path without VPN, on each Pi: `cp deploy/node.env.example deploy/node.env`, set `NODE_AGENT_TOKEN`, `DOWNLOADS_DIR` and
+`MEDIA_ROOTS` (Pi 5: `/Media_Server/05`; Pi 4: `/cloud/01,/cloud/02`), add the matching volume lines, then
+`docker compose -f deploy/docker-compose.node.novpn.yml --env-file deploy/node.env up -d --build`. Set the qBittorrent
+password in its WebUI, then fill in the agent / qBittorrent URLs and credentials in **Settings** and turn on *Downloads enabled*.
+
+### With a VPN (gluetun)
 Topology: **one controller** (Pi 5: UI, DB, scheduler, approvals) + **one node stack per Pi**
 (`deploy/docker-compose.node.yml`: `gluetun` + `qbittorrent` + a thin `agent`). The Pi 5 runs a node stack too.
 The controller talks to each node's qBittorrent WebUI and agent over the LAN.
@@ -41,7 +51,7 @@ The controller talks to each node's qBittorrent WebUI and agent over the LAN.
 2. Open qBittorrent's WebUI (`http://<pi>:8080`), set a password; put it in the controller `.env`
    (`QBIT_USERNAME`/`QBIT_PASSWORD`) with the same `NODE_AGENT_TOKEN`, set `DOWNLOAD_CLIENT=qbittorrent`,
    and enter the agent/qBittorrent URLs on the **Nodes** page (or `NODE_PI*_URL` in `.env`). Set each tag's final folder.
-3. **Do not set `DOWNLOADS_ENABLED=true` until this checklist passes on every node:**
+3. **If you use a VPN, do not turn on *Require VPN* / downloads until this checklist passes on every node:**
    - [ ] Nodes page shows *VPN protected* and the VPN IP differs from the Home IP (compare with an
          "what is my ip" site run from your PC).
    - [ ] `docker exec <qbittorrent container> wget -qO- https://api.ipify.org` prints the **VPN** IP, not your home IP.
@@ -51,9 +61,9 @@ The controller talks to each node's qBittorrent WebUI and agent over the LAN.
    - [ ] With a *legal* torrent (e.g. a Linux ISO) approved on a node: it downloads, stops after completion
          (no seeding), and is moved to the tag's folder; Jellyfin refreshes.
    - [ ] An approval while the VPN is down is refused with a 409 and nothing appears in qBittorrent.
-4. Then set `DOWNLOADS_ENABLED=true` and restart the controller.
+4. Then turn on *Require VPN to download* and *Downloads enabled* in Settings.
 
-Safety behaviour: approvals are refused unless the flag is on, the node's tunnel is up, its public IP is known and
+Safety behaviour: approvals are refused unless *Downloads enabled* is on and, when *Require VPN* is on, the node's tunnel is up, its public IP is known and
 differs from the home IP (measured by the agent outside the VPN, or `HOME_PUBLIC_IP`), and the target disk has room
 (size x1.1 + `MIN_FREE_RESERVE_GB`). Any error in these checks blocks the download. The agent only reads/writes
 under `DOWNLOAD_ROOTS` / `MEDIA_ROOTS`.

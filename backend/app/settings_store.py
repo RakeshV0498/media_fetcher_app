@@ -53,6 +53,8 @@ FIELDS: tuple[Field, ...] = (
     # Downloads
     Field("downloads_enabled", "Downloads enabled", "downloads", "bool", danger=True,
           help="Master switch. Real downloads also need the VPN check to pass on the target node."),
+    Field("require_vpn", "Require VPN to download", "downloads", "bool",
+          help="Off: downloads work without a VPN. On: a download is refused unless the target node's VPN check passes."),
     Field("download_client", "Download client", "downloads", "select", options=("mock", "qbittorrent"),
           help="'mock' simulates downloads without touching the network."),
     Field("qbit_username", "qBittorrent username", "downloads"),

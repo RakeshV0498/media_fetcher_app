@@ -227,6 +227,7 @@ def real_setup(db, monkeypatch):
     monkeypatch.setattr(service, "_client", None)
     monkeypatch.setattr(settings, "download_client", "qbittorrent")
     monkeypatch.setattr(settings, "downloads_enabled", True)
+    monkeypatch.setattr(settings, "require_vpn", True)   # these tests exercise the VPN gate
     monkeypatch.setattr(settings, "home_public_ip", "")
     node = db.scalar(select(Node).where(Node.name == "pi4"))
     node.agent_url, node.qbit_url, node.download_dir = AGENT, QB, "/mnt/dl"
@@ -346,3 +347,49 @@ def test_download_disk_full_blocks_even_if_library_disk_has_room(db, real_setup)
     with pytest.raises(service.ApproveError, match=r"disk space.*/mnt/dl"):
         service.approve(db, rel.id, var.id, tag.id)
     assert fake.added == []
+
+
+# ---------------- VPN is optional ----------------
+@respx.mock
+def test_downloads_work_without_vpn_by_default(db, real_setup, monkeypatch):
+    rel, var, tag, fake = real_setup
+    monkeypatch.setattr(settings, "require_vpn", False)
+    vpn = respx.get(f"{AGENT}/vpn").mock(side_effect=httpx.ConnectError("no gluetun on this node"))
+    respx.get(f"{AGENT}/disk").mock(return_value=httpx.Response(200, json={"free_bytes": 500 * 1024**3}))
+    service.approve(db, rel.id, var.id, tag.id)
+    assert fake.added == [("magnet:?xt=urn:btih:1", "tv", "/mnt/dl/tv")]
+    assert not vpn.called                                                   # VPN is not even consulted
+
+
+@respx.mock
+def test_without_vpn_the_master_switch_disk_and_agent_checks_still_apply(db, real_setup, monkeypatch):
+    rel, var, tag, fake = real_setup
+    monkeypatch.setattr(settings, "require_vpn", False)
+    monkeypatch.setattr(settings, "downloads_enabled", False)
+    with pytest.raises(service.ApproveError, match="disabled"):
+        service.approve(db, rel.id, var.id, tag.id)
+    monkeypatch.setattr(settings, "downloads_enabled", True)
+    respx.get(f"{AGENT}/disk").mock(return_value=httpx.Response(200, json={"free_bytes": 1024**3}))
+    with pytest.raises(service.ApproveError, match="disk space"):
+        service.approve(db, rel.id, var.id, tag.id)
+    tag.node.agent_url = ""
+    with pytest.raises(service.ApproveError, match="no node agent"):
+        service.approve(db, rel.id, var.id, tag.id)
+    assert fake.added == []
+
+
+def test_default_library_paths_are_the_real_folders(db):
+    from app.models import Tag
+    paths = {t.name: t.final_path for t in db.scalars(select(Tag))}
+    assert paths == {"Tamil Movie": "/Media_Server/05/Tamil Movies", "English Movie": "/Media_Server/05/English Movies",
+                     "Dubbed Movie": "/Media_Server/05/Dubbed Movies",
+                     "Indian Language Movie": "/Media_Server/05/Indian Language Movies",
+                     "TV Show": "/cloud/01", "Anime": "/cloud/02/Anime"}
+
+
+def test_require_vpn_defaults_off_and_is_an_editable_setting(api_client):
+    assert settings.require_vpn is False
+    fields = {f["key"]: f for f in api_client.get("/api/app-settings").json()["fields"]}
+    assert fields["require_vpn"]["group"] == "downloads" and fields["require_vpn"]["value"] is False
+    api_client.put("/api/app-settings", json={"values": {"require_vpn": True}})
+    assert settings.require_vpn is True

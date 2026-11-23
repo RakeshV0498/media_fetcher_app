@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     app_secret: str = "dev-insecure"
     database_url: str = "sqlite:///./data/app.db"
+    require_vpn: bool = False  # VPN is optional: when True, a node's VPN check must pass before downloading
     downloads_enabled: bool = False  # safe default: downloads OFF
     home_public_ip: str = ""
     user_agent: str = "MediaFetcher/0.1"

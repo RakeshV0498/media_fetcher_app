@@ -180,15 +180,16 @@ function Nodes({ notify, fields, reload }: { notify: ToastFn; fields: AppField[]
   };
   return (
     <>
-      <p className="sub tab-intro">One download node per Pi. Downloads only run when the node's VPN is verified. Allowed media folders (<span className="mono">MEDIA_ROOTS</span>) are a security boundary and stay in each Pi's <span className="mono">node.env</span>.</p>
+      <p className="sub tab-intro">One download node per Pi. A VPN is optional; if you turn on “Require VPN to download”, downloads only run when the node's VPN is verified. Allowed media folders (<span className="mono">MEDIA_ROOTS</span>) are a security boundary and stay in each Pi's <span className="mono">node.env</span>.</p>
       <div className="grid forms">
         {nodes?.map((n) => (
           <article key={n.id} className="card form-card">
             <div className="title-row">
               <span className={`shield ${n.vpn_ok ? "good" : "bad"}`}><Icon name="shield" size={20} /></span><h3>{n.name}</h3>
-              <span className={`status ${n.vpn_ok ? "good" : "bad"}`}><i />{n.vpn_ok ? "VPN protected" : "VPN not verified"}</span>
+              <span className={`status ${n.vpn_ok ? "good" : n.vpn_required ? "bad" : "warn"}`}><i />{n.vpn_ok ? "VPN protected" : n.vpn_required ? "VPN not verified" : "No VPN (allowed)"}</span>
             </div>
-            {!n.vpn_ok && <p className="note bad"><Icon name="alert" size={16} />{n.vpn}</p>}
+            {!n.vpn_ok && n.vpn_required && <p className="note bad"><Icon name="alert" size={16} />{n.vpn}</p>}
+            {!n.vpn_ok && !n.vpn_required && <p className="note"><Icon name="alert" size={16} />Downloads from this node use your home IP. Turn on "Require VPN to download" in the Downloads tab to enforce a VPN.</p>}
             <dl className="kv"><div><dt>VPN IP</dt><dd className="mono">{n.public_ip ?? "–"}</dd></div><div><dt>Home IP</dt><dd className="mono">{n.home_ip ?? "–"}</dd></div></dl>
             <label className="field"><span className="lbl">Node agent URL</span><input className="mono" value={n.agent_url} placeholder="http://pi4.lan:8800" onChange={(e) => patch(n.id, { agent_url: e.target.value })} /></label>
             <label className="field"><span className="lbl">qBittorrent WebUI URL</span><input className="mono" value={n.qbit_url} placeholder="http://pi4.lan:8080" onChange={(e) => patch(n.id, { qbit_url: e.target.value })} /></label>
@@ -254,7 +255,7 @@ export function SettingsPage({ notify }: { notify: ToastFn }) {
           </div>}
           {tab === "integrations" && <FieldsForm group="integrations" fields={fields} reload={reload} notify={notify} tests={[{ name: "tmdb", label: "Test TMDB" }, { name: "jellyfin", label: "Test Jellyfin" }]} intro="Metadata and your media server." />}
           {tab === "telegram" && <FieldsForm group="telegram" fields={fields} reload={reload} notify={notify} tests={[{ name: "telegram", label: "Send test message" }]} intro="New releases arrive with Approve / Reject buttons. Press Start in your bot's chat first." />}
-          {tab === "downloads" && <FieldsForm group="downloads" fields={fields.filter((f) => !["qbit_username", "qbit_password", "node_agent_token"].includes(f.key))} reload={reload} notify={notify} intro="Real downloads stay blocked unless the master switch is on and the target node's VPN check passes." />}
+          {tab === "downloads" && <FieldsForm group="downloads" fields={fields.filter((f) => !["qbit_username", "qbit_password", "node_agent_token"].includes(f.key))} reload={reload} notify={notify} intro="Real downloads need the master switch on. A VPN is optional: switch on “Require VPN to download” to also demand a passing VPN check." />}
           {tab === "libraries" && <Libraries notify={notify} />}
           {tab === "nodes" && <Nodes notify={notify} fields={fields} reload={reload} />}
           {tab === "security" && <Security notify={notify} fields={fields} reload={reload} />}

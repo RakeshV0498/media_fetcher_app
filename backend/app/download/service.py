@@ -79,20 +79,24 @@ def approve(db: Session, release_id: int, variant_id: int, tag_id: int,
         raise ApproveError(400, "variant does not belong to this release")
     if rel.status not in ("new", "snoozed"):
         raise ApproveError(409, f"release is already {rel.status}")
-    # Gate order matters: the (network) VPN check only runs once the flag is on.
+    # Gate order matters: the (network) VPN check only runs once downloads are on, and only if a VPN is required.
+    needs_vpn_check = not client.is_mock and settings.downloads_enabled and settings.require_vpn
     gate = check_gate(settings.downloads_enabled,
-                      GateResult(True) if (client.is_mock or not settings.downloads_enabled) else vpn_gate(tag.node),
+                      vpn_gate(tag.node) if needs_vpn_check else GateResult(True),
                       client.is_mock)
     if not gate.allowed:
         raise ApproveError(409, gate.reason)
     save_path = tag.final_path  # mock client only; real clients use the node's download folder
     if not client.is_mock:
         agent = agent_for(tag.node)
+        if agent is None:
+            raise ApproveError(409, f"no node agent configured for {tag.node.name if tag.node else 'this tag'}: "
+                                    "it is needed for disk checks and for filing finished downloads")
         try:
-            save_dir = download_dir_for(tag.node, agent)  # type: ignore[arg-type]
+            save_dir = download_dir_for(tag.node, agent)
             save_path = f"{save_dir.rstrip('/')}/{tag.qbit_category or 'misc'}"
             for where in {save_dir, tag.final_path}:  # data lands in one, ends up in the other
-                free = agent.free_bytes(where)  # type: ignore[union-attr]
+                free = agent.free_bytes(where)
                 space = enough_space(free, var.size_bytes, settings.min_free_reserve_gb * 1024**3)
                 if not space.allowed:
                     raise ApproveError(409, f"{space.reason} (in {where})")

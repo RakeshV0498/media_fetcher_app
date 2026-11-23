@@ -46,6 +46,7 @@ def _node_status(n: Node) -> dict:
         v = agent.vpn(settings.home_public_ip)
         info = {"vpn_ok": v.gate.allowed, "vpn": "protected" if v.gate.allowed else v.gate.reason,
                 "public_ip": v.vpn_ip, "home_ip": v.home_ip}
+    info["vpn_required"] = settings.require_vpn
     return {"id": n.id, "name": n.name, "agent_url": n.agent_url, "qbit_url": n.qbit_url, "download_dir": n.download_dir,
             "max_concurrent": n.max_concurrent, **info}
 
