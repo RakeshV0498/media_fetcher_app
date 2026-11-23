@@ -260,3 +260,6 @@ textarea { resize: vertical; line-height: 1.5; }
 
 .warn-note { align-items: center; flex-wrap: wrap; padding: 10px 12px; margin: 4px 0; background: var(--warn-soft); color: var(--warn); border-radius: 10px; font-weight: 500; }
 .warn-note span { flex: 1 1 280px; }
+
+.versions-pending { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; background: var(--accent-soft); border: 1px dashed var(--accent); border-radius: 12px; }
+.versions-pending p { margin: 2px 0 0; font-size: .86rem; max-width: 52ch; }

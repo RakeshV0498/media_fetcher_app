@@ -107,3 +107,16 @@ Download folder*), in a sub-folder named after the tag's category. When a downlo
 video into the tag's **library folder** (`Title (Year)/...` or `Show/Season NN/...`) and the **Downloads** page lists the
 final path. Keep the download folder on the same disk as the library so the move is an instant rename. Both folders must be
 mounted at the same path inside the qBittorrent and agent containers (see `docker-compose.node.yml`).
+
+## Sites with a listing page + a detail page per title
+Some sites list titles on one page and show the resolutions only on each title's own page. Configure the source with
+the listing selectors plus a `detail` block (same keys, applied to the detail page); the listing's `link` must point at
+the detail page:
+
+```json
+{ "item": "div.entry", "title": "a.title", "link": "a.title@href",
+  "detail": { "item": "div.version", "title": ".name", "magnet": "a.magnet@href", "size": ".size", "seeders": ".seeds" } }
+```
+A scan only reads the listing and creates the entries. When you want one, press **Load versions** on its card: only that
+one detail page is fetched, and the resolutions then appear (ranked by seeders) to pick from. Detail pages are only fetched
+from the source's own host.

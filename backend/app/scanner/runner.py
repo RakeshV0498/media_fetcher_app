@@ -36,14 +36,41 @@ def _ident(item: RawItem) -> str:
     return item.torrent_url or item.link or item.magnet or item.title
 
 
+def add_variant(db: Session, source: Source, rel: Release, item: RawItem) -> bool:
+    """Attach one downloadable version to a release (idempotent; refreshes seeders). True if newly created."""
+    p = parse_title(item.title)
+    ident = _ident(item)
+    var = db.scalar(select(Variant).where(
+        Variant.release_id == rel.id, Variant.source_id == source.id, Variant.ident == ident))
+    if var is None:
+        db.add(Variant(
+            release_id=rel.id, source_id=source.id, ident=ident, title=item.title,
+            quality=p.quality, codec=p.codec, language=p.language,
+            size_bytes=parse_size(item.size_text), seeders=item.seeders,
+            leechers=item.leechers, magnet=item.magnet, torrent_url=item.torrent_url,
+            link=item.link))
+        return True
+    if item.seeders is not None:
+        var.seeders = item.seeders
+    if item.leechers is not None:
+        var.leechers = item.leechers
+    var.seen_at = datetime.now(timezone.utc)
+    return False
+
+
 def upsert_items(db: Session, source: Source, items: list[RawItem]) -> int:
-    """Insert new releases/variants; refresh seeders on known ones. Returns new variant count."""
+    """Insert new releases/variants; refresh seeders on known ones. Returns the number of new entries.
+
+    Sources with a `detail` selector config are two-level sites: listing entries without a magnet/torrent only
+    record their detail-page URL; the versions are fetched on demand (see scanner.details.load_versions)."""
     tags = {t.name: t.id for t in db.scalars(select(Tag))}
+    two_level = bool((source.selectors or {}).get("detail"))
     new = 0
     for item in items:
         p = parse_title(item.title)
         key = release_key(p)
         rel = db.scalar(select(Release).where(Release.release_key == key))
+        created = rel is None
         if rel is None:
             tag_id = source.default_tag_id or tags.get(suggest_tag_name(p, item.title))
             rel = Release(release_key=key, title=p.title, year=p.year, season=p.season,
@@ -51,23 +78,13 @@ def upsert_items(db: Session, source: Source, items: list[RawItem]) -> int:
                           kind=p.kind, suggested_tag_id=tag_id)
             db.add(rel)
             db.flush()
-        ident = _ident(item)
-        var = db.scalar(select(Variant).where(
-            Variant.release_id == rel.id, Variant.source_id == source.id, Variant.ident == ident))
-        if var is None:
-            db.add(Variant(
-                release_id=rel.id, source_id=source.id, ident=ident, title=item.title,
-                quality=p.quality, codec=p.codec, language=p.language,
-                size_bytes=parse_size(item.size_text), seeders=item.seeders,
-                leechers=item.leechers, magnet=item.magnet, torrent_url=item.torrent_url,
-                link=item.link))
+        if two_level and item.link and not (item.magnet or item.torrent_url):
+            if not rel.detail_url:
+                rel.detail_url, rel.detail_source_id = item.link, source.id
+            new += 1 if created else 0
+            continue
+        if add_variant(db, source, rel, item):
             new += 1
-        else:
-            if item.seeders is not None:
-                var.seeders = item.seeders
-            if item.leechers is not None:
-                var.leechers = item.leechers
-            var.seen_at = datetime.now(timezone.utc)
     db.commit()
     return new
 

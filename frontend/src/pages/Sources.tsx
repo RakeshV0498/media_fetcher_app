@@ -5,6 +5,7 @@ import { Empty, Icon, PageHead } from "../ui";
 
 const EMPTY = { name: "", url: "", mode: "auto", interval_minutes: 60, cron: "", user_agent: "", selectors: "{}" };
 const SEL_EXAMPLE = '{\n  "item": "tr.row",\n  "title": "a.title",\n  "link": "a.title@href",\n  "magnet": "a.magnet@href",\n  "size": ".size",\n  "seeders": ".seeds",\n  "leechers": ".leech"\n}';
+const SEL_TWO_LEVEL = '{\n  "item": "div.entry",\n  "title": "a.title",\n  "link": "a.title@href",\n  "detail": {\n    "item": "div.version",\n    "title": ".name",\n    "magnet": "a.magnet@href",\n    "torrent": "a.torrent@href",\n    "size": ".size",\n    "seeders": ".seeds"\n  }\n}';
 const MODES: Record<string, string> = { auto: "Auto (feed, else HTML)", feed: "Feed only", html: "HTML only" };
 
 export function Sources({ notify }: { notify: ToastFn }) {
@@ -60,7 +61,8 @@ export function Sources({ notify }: { notify: ToastFn }) {
             <label className="field">Cron <span className="hint">overrides interval</span><input className="mono" placeholder="*/30 * * * *" value={form.cron} onChange={(e) => set({ cron: e.target.value })} /></label>
             <label className="field">User-Agent <span className="hint">blank = default</span><input value={form.user_agent} onChange={(e) => set({ user_agent: e.target.value })} /></label>
             <label className="field wide">HTML selectors (JSON) <button type="button" className="link inline" onClick={() => set({ selectors: SEL_EXAMPLE })}>Insert example</button>
-              <span className="hint">Needs <span className="mono">item</span> and <span className="mono">title</span>. Optional: link, torrent, magnet, size, seeders, leechers, date, <span className="mono">title_regex</span> (keeps the first group of the match as the title).</span>
+              <button type="button" className="link inline" onClick={() => set({ selectors: SEL_TWO_LEVEL })}>Insert two-level example</button>
+              <span className="hint">Needs <span className="mono">item</span> and <span className="mono">title</span>. Optional: link, torrent, magnet, size, seeders, leechers, date, <span className="mono">title_regex</span> (keeps the first group of the match as the title). For sites where each title has its own page with the versions, add a <span className="mono">detail</span> block (same keys) and a <span className="mono">link</span> to the page.</span>
               <textarea className="mono" rows={7} value={form.selectors} onChange={(e) => set({ selectors: e.target.value })} spellCheck={false} /></label>
           </div>
           <div className="form-actions">

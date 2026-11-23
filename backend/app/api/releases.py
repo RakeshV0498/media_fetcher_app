@@ -18,7 +18,8 @@ def _card(r: Release, quality: str, all_variants: bool) -> dict:
     return {
         "id": r.id, "title": r.title, "year": r.year, "season": r.season,
         "episode": r.episode, "absolute_episode": r.absolute_episode, "kind": r.kind,
-        "status": r.status, "poster_url": r.poster_url, "overview": r.overview,
+        "status": r.status, "detail_url": r.detail_url,
+        "needs_versions": bool(r.detail_url) and not r.variants, "poster_url": r.poster_url, "overview": r.overview,
         "genres": r.genres, "suggested_tag_id": r.suggested_tag_id,
         "variant_count": len(r.variants),
         "variants": [{
@@ -138,3 +139,18 @@ def unsnooze_due() -> None:
             if r.snoozed_until and r.snoozed_until.replace(tzinfo=timezone.utc) <= now:
                 r.status, r.snoozed_until = "new", None
         db.commit()
+
+
+@router.post("/{rid}/load-versions")
+def load_versions_endpoint(rid: int, db: Session = Depends(get_db)) -> dict:
+    import httpx
+
+    from ..scanner.details import load_versions
+    r = _get(db, rid)
+    try:
+        added = load_versions(db, r)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"could not load the detail page: {e}") from e
+    return {"added": added, "versions": len(r.variants)}

@@ -30,6 +30,16 @@ function Card({ r, tags, sources, selected, onSelect, notify, reload }: {
   const srcName = (id: number) => sources.find((s) => s.id === id)?.name ?? `#${id}`;
   const actionable = r.status === "new" || r.status === "snoozed";
 
+  const [loading, setLoading] = useState(false);
+  const loadVersions = async () => {
+    setLoading(true);
+    try {
+      const res = await api<{ added: number; versions: number }>(`/api/releases/${r.id}/load-versions`, "POST");
+      notify(`Found ${res.versions} version${res.versions === 1 ? "" : "s"}`);
+      reload();
+    } catch (e) { notify((e as Error).message, true); } finally { setLoading(false); }
+  };
+
   const act = async (path: string, body?: unknown, ok = "Done") => {
     setBusy(true);
     try {
@@ -61,6 +71,15 @@ function Card({ r, tags, sources, selected, onSelect, notify, reload }: {
         </div>
       </div>
 
+      {r.needs_versions && (
+        <div className="versions-pending">
+          <div><strong>Versions not loaded yet</strong><p className="muted">This site lists each title on its own page. Load that page to see the available resolutions and sizes.</p></div>
+          <div className="row">
+            <button className="btn primary" onClick={loadVersions} disabled={loading}><Icon name="download" size={16} />{loading ? "Loading…" : "Load versions"}</button>
+            {r.detail_url && <a className="btn ghost" href={r.detail_url} target="_blank" rel="noreferrer noopener">Open page</a>}
+          </div>
+        </div>
+      )}
       <div className="variants" role="radiogroup" aria-label="Choose a version">
         {shown.map((v, i) => (
           <label key={v.id} className={`variant ${variantId === v.id ? "picked" : ""}`}>

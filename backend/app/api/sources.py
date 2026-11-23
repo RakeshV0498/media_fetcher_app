@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from typing import Any
+
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,12 +19,26 @@ class SourceIn(BaseModel):
     url: str
     feed_url: str | None = None
     mode: str = "auto"
-    selectors: dict[str, str] = {}
+    selectors: dict[str, Any] = {}
     user_agent: str = ""
     interval_minutes: int = 60
     cron: str | None = None
     enabled: bool = True
     default_tag_id: int | None = None
+
+
+    @field_validator("selectors")
+    @classmethod
+    def _check_selectors(cls, v: dict[str, Any]) -> dict[str, Any]:
+        for key, val in v.items():
+            if key == "detail":  # second-level (detail page) selectors: same keys, string values
+                if not isinstance(val, dict) or not all(isinstance(x, str) for x in val.values()):
+                    raise ValueError("'detail' must be an object of selector strings")
+                if not val.get("item") or not val.get("title"):
+                    raise ValueError("'detail' needs at least 'item' and 'title' selectors")
+            elif not isinstance(val, str):
+                raise ValueError(f"selector '{key}' must be a string")
+        return v
 
 
 class SourceOut(SourceIn):

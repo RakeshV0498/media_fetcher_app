@@ -37,6 +37,7 @@ export interface Release {
   id: number; title: string; year: number | null; season: number | null;
   episode: number | null; absolute_episode: number | null; kind: string; status: string;
   poster_url: string | null; overview: string | null; genres: string[];
+  detail_url: string | null; needs_versions: boolean;
   suggested_tag_id: number | null; variant_count: number; variants: Variant[];
 }
 export interface Tag { id: number; name: string; kind: string; node_id: number | null; qbit_category: string; final_path: string }
