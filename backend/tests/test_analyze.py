@@ -109,11 +109,74 @@ def test_detail_page_versions_are_separated_with_quality_size_seeders():
     assert [i.seeders for i in got] == [40, 310, 12] and got[1].size_text == "2.4 GB"
 
 
-def test_detail_page_without_wrapping_or_links_explains_itself():
-    cands, warns = analyze_detail(DETAIL_FLAT, BASE)
-    assert cands == [] and "can't be separated" in warns[0]
+def test_detail_page_without_any_download_links_explains_itself():
     cands, warns = analyze_detail("<html><body><p>nothing</p></body></html>", BASE)
     assert cands == [] and "No magnet or .torrent links" in warns[0]
+
+
+FLAT = ("<html><body><div class='menu'><a href='/'>Home</a></div><div class='post'><center>"
+        + "".join(f"""<strong>Film Name (2011) BluRay - {q} - x264 - {sz} - ESub :</strong><br>
+<a href="/files/{i}.torrent">www.Site.example - Film Name (2011) BluRay - {q} - {sz} - ESub.mkv.torrent</a><br>
+<a class="btn" href="{MAG}{i}">MAGNET</a><br><a class="btn2" href="/direct/{i}">DIRECT LINK</a><br><br>"""
+                  for i, (q, sz) in enumerate([("1080p", "2GB"), ("720p", "1.1GB"), ("480p", "400MB")], start=1))
+        + "</center></div></body></html>")
+
+FLAT_ONE_CONTAINER = ("<html><body><div class='post'>" + "".join(
+    f'Title {i} 1080p x264 2GB:<br><a href="/x/{i}.torrent">file {i}</a><br><a href="{MAG}{i}">MAGNET</a><br><br>'
+    for i in range(1, 4)) + "</div></body></html>")
+
+
+def test_versions_listed_one_after_another_are_read_by_position():
+    """Real-world shape: no wrapper per version - title line, .torrent link, magnet button, repeat."""
+    cands, warns = analyze_detail(FLAT_ONE_CONTAINER, BASE)
+    assert warns == [] and cands
+    c = cands[0]
+    assert c.stats["items"] == 3 and c.stats["with_magnet"] == 3 and c.stats["with_torrent"] == 3
+    got = parse_html(FLAT_ONE_CONTAINER, BASE, c.selectors)
+    assert [i.title for i in got] == ["Title 1 1080p x264 2GB:", "Title 2 1080p x264 2GB:", "Title 3 1080p x264 2GB:"]
+    assert [i.magnet.rsplit(":", 1)[-1] for i in got] == [f"btih:{n}" for n in (1, 2, 3)][:0] or all(
+        g.magnet.endswith(str(n)) for g, n in zip(got, (1, 2, 3)))   # each version got ITS OWN magnet
+    assert "one after another" in c.notes[0]
+
+
+def test_flat_versions_with_descriptive_torrent_link_text_use_it_as_the_title():
+    cands, _ = analyze_detail(FLAT, BASE)
+    c = cands[0]
+    got = parse_html(FLAT, BASE, c.selectors)
+    assert c.selectors["title"] == "self" and len(got) == 3
+    assert "1080p" in got[0].title and "720p" in got[1].title and "480p" in got[2].title
+    assert [g.torrent_url.rsplit("/", 1)[-1] for g in got] == ["1.torrent", "2.torrent", "3.torrent"]
+    assert [g.magnet[-1] for g in got] == ["1", "2", "3"]
+    assert c.selectors["item"].startswith(".post") or "center" in c.selectors["item"]   # scoped away from menus
+
+
+def test_relative_selectors_do_not_leak_between_versions_or_out_of_the_container():
+    html = (f'<div class="a"><p>First version 1080p<br><a href="/1.torrent">f</a></p>'      # this one has NO magnet
+            f'<p>Second version 720p<br><a href="/2.torrent">s</a><br><a href="{MAG}22">M</a></p></div>'
+            f'<div class="other"><a href="{MAG}99">related magnet elsewhere</a></div>')
+    sel = {"item": "a[href*='.torrent']", "title": "prevtext", "torrent": "@href", "magnet": f"next:a[href^='magnet:']@href"}
+    got = parse_html(html, BASE, sel)
+    assert [g.title for g in got] == ["First version 1080p", "Second version 720p"]
+    assert got[0].magnet is None and got[1].magnet.endswith("22")        # not stolen from the next version / other block
+
+
+def test_size_is_read_from_the_title_when_there_is_no_size_column(db):
+    from app.models import Release, Source, Variant
+    from app.scanner.runner import upsert_items
+    from sqlalchemy import select
+    src = Source(name="s", url=BASE)
+    db.add(src)
+    db.commit()
+    cands, _ = analyze_detail(FLAT, BASE)
+    items = parse_html(FLAT, BASE, cands[0].selectors)
+    rel = Release(release_key="film", title="Film Name", kind="movie")
+    db.add(rel)
+    db.flush()
+    from app.scanner.runner import add_variant
+    for i in items:
+        add_variant(db, src, rel, i)
+    db.commit()
+    assert sorted(v.size_bytes for v in db.scalars(select(Variant))) == [400_000_000, 1_100_000_000, 2_000_000_000]
 
 
 # ---------------------------------------------------------------- API
@@ -165,3 +228,28 @@ def test_a_short_two_entry_list_is_found_when_nothing_bigger_exists():
     assert c.count == 2 and c.two_level
     # ...but a 2-item menu is still not mistaken for a listing when the page has a real one
     assert best(NAV + TABLE).selectors["item"].startswith("tr")
+
+
+@respx.mock
+def test_flat_page_detected_selectors_work_through_the_real_load_versions_flow(db):
+    from sqlalchemy import select
+
+    from app.models import Release, Source
+    from app.scanner.details import load_versions
+    cands, _ = analyze_detail(FLAT, "https://films.example/m/1")
+    src = Source(name="flat", url="https://films.example/list", mode="html",
+                 selectors={"item": "div.entry", "title": "a.t", "link": "a.t@href", "detail": cands[0].selectors})
+    db.add(src)
+    db.flush()
+    rel = Release(release_key="film", title="Film Name", kind="movie", detail_url="https://films.example/m/1",
+                  detail_source_id=src.id)
+    db.add(rel)
+    db.commit()
+    respx.get("https://films.example/m/1").mock(return_value=httpx.Response(200, text=FLAT))
+    with httpx.Client() as c:
+        assert load_versions(db, rel, c) == 3
+    vs = sorted(rel.variants, key=lambda v: v.size_bytes or 0)
+    assert [v.quality for v in vs] == ["480p", "720p", "1080p"]
+    assert [v.size_bytes for v in vs] == [400_000_000, 1_100_000_000, 2_000_000_000]
+    assert all(v.magnet and v.torrent_url and v.torrent_url.startswith("https://films.example/files/") for v in vs)
+    assert {v.magnet[-1] for v in vs} == {"1", "2", "3"}

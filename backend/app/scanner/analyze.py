@@ -358,12 +358,60 @@ def analyze_detail(html: str, base_url: str = "") -> tuple[list[Candidate], list
         got_links = stats["with_magnet"] + stats["with_torrent"]
         score = stats["items"] * 10 + got_links * 5 + stats["with_size"] + stats["with_seeders"]
         cands.append(Candidate(selectors=selectors, score=score, count=stats["items"], preview=preview, stats=stats))
+    flat = _flat_candidate(soup, html, base_url)
+    if flat is not None and (not cands or flat.count > max(c.count for c in cands)):
+        cands.append(flat)  # versions listed one after another, not in separate boxes
     cands.sort(key=lambda c: -c.score)
     warnings = []
     if not cands:
-        warnings.append("Download links exist, but the versions aren't wrapped in separate, similar blocks, so they "
-                        "can't be separated automatically.")
+        warnings.append("Download links exist, but the versions couldn't be told apart automatically. Use 'Paste page "
+                        "HTML' with the page as you see it, or write the selectors by hand.")
     return cands[:MAX_CANDIDATES], warnings
+
+
+def _common_ancestor(els: list[Tag]) -> Tag | None:
+    chains = [list(reversed([e, *[p for p in e.parents if isinstance(p, Tag)]])) for e in els]
+    common = None
+    for group in zip(*chains):
+        if all(g is group[0] for g in group):
+            common = group[0]
+        else:
+            break
+    return common
+
+
+def _flat_candidate(soup: BeautifulSoup, html: str, base_url: str) -> Candidate | None:
+    """Versions that follow each other inside one container (title line, .torrent link, magnet button, next title ...).
+    Each download link starts a version; the magnet is the next magnet after it, the title the text before it."""
+    torrents, magnets = soup.select(TORRENT), soup.select(MAGNET)
+    if torrents and len(torrents) >= len(magnets):
+        css, anchors = TORRENT, torrents
+    elif magnets:
+        css, anchors = MAGNET, magnets
+    else:
+        return None
+    lca = _common_ancestor(anchors) if len(anchors) > 1 else anchors[0].parent
+    scope = ""
+    if isinstance(lca, Tag) and lca.name not in ("body", "html", "[document]"):
+        scope = _path_to(lca) + " "
+    sel: dict[str, str] = {"item": scope + css}
+    if css == TORRENT:
+        sel["torrent"] = "@href"
+        if magnets:
+            sel["magnet"] = f"next:{MAGNET}@href"
+        name = _text(anchors[0])
+        sel["title"] = "self" if (_QUALITY.search(name) or len(name) >= 14) else "prevtext"
+    else:
+        sel["magnet"] = "@href"
+        sel["title"] = "prevtext"
+    preview, stats = _verify(html, base_url, sel)
+    if not stats or stats["items"] == 0:
+        return None
+    got = stats["with_magnet"] + stats["with_torrent"]
+    return Candidate(
+        selectors=sel, score=stats["items"] * 10 + got * 5, count=stats["items"], preview=preview, stats=stats,
+        notes=["The versions are listed one after another (not in separate boxes), so each download link starts a "
+               "version and its title is read from the text just before it. Check the titles in the preview."])
 
 
 def _field_selectors_detail(block: Tag) -> tuple[dict[str, str], list[str]]:
