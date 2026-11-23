@@ -77,3 +77,64 @@ def best_variant(db: Session, rel: Release) -> Variant | None:
 
 def list_downloads(db: Session) -> list[Download]:
     return list(db.scalars(select(Download).order_by(Download.id.desc())))
+
+
+# ---- post-processing -------------------------------------------------------
+from pathlib import Path  # noqa: E402
+
+from ..postprocess.jellyfin import refresh_library  # noqa: E402
+from ..postprocess.mover import NeedsAttention, PathNotAllowed, cleanup_empty, file_release  # noqa: E402
+
+
+def finalize(db: Session, dl: Download, client: DownloadClient | None = None,
+             allowed_roots: list[Path] | None = None) -> Download:
+    """Stop (no seeding), file into the Jellyfin layout, refresh Jellyfin. Safe to retry."""
+    client = client or get_client()
+    tag, rel = dl.tag, dl.release
+    if allowed_roots is None and settings.media_roots:
+        allowed_roots = [Path(r) for r in settings.media_roots.split(",") if r.strip()]
+    if not dl.content_path:
+        p = client.status(dl.client_id)
+        if p and p.content_path:
+            dl.content_path = p.content_path
+    if not dl.content_path:
+        dl.status = "done"  # mock/no files to file
+        db.commit()
+        return dl
+    dl.status, dl.error = "moving", ""
+    db.commit()
+    if dl.client_id:  # stop + drop from client, keep files; never seed
+        try:
+            client.remove(dl.client_id, delete_files=False)
+        except Exception:  # already gone is fine
+            pass
+        dl.client_id = ""
+    try:
+        res = file_release(Path(dl.content_path), Path(tag.final_path), rel.kind, rel.title,
+                           rel.year, rel.season, rel.episode, allowed_roots)
+        if res.duplicates:
+            dl.status = "duplicate"
+            dl.error = f"already in library: {', '.join(p.name for p in res.duplicates)}"
+        else:
+            dl.status = "done"
+            dl.final_files = [str(d) for _, d in res.moved]
+            cleanup_empty(Path(dl.content_path))
+            refresh_library(settings.jellyfin_url, settings.jellyfin_api_key)
+    except NeedsAttention as e:
+        dl.status, dl.error = "needs_attention", str(e)
+    except (PathNotAllowed, OSError) as e:
+        dl.status, dl.error = "failed", str(e)
+    db.commit()
+    return dl
+
+
+def process_completed(db: Session, client: DownloadClient | None = None) -> int:
+    """Scheduler hook: finalize downloads the client reports as done."""
+    client = client or get_client()
+    n = 0
+    for dl in db.scalars(select(Download).where(Download.status.in_(("downloading", "queued")))):
+        p = client.status(dl.client_id) if dl.client_id else None
+        if p and p.state == "done":
+            finalize(db, dl, client)
+            n += 1
+    return n

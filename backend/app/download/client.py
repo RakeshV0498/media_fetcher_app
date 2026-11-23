@@ -11,6 +11,7 @@ class Progress:
     progress: float  # 0..1
     speed: int  # bytes/s
     eta: int | None  # seconds
+    content_path: str | None = None  # where finished files live (real clients)
 
 
 class DownloadClient(Protocol):

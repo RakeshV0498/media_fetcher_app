@@ -46,7 +46,7 @@ export interface Source {
 }
 export interface Download {
   id: number; title: string; season: number | null; episode: number | null; quality: string | null;
-  tag: string; node: string; status: string; progress: number; speed: number; eta: number | null; error: string;
+  tag: string; node: string; status: string; progress: number; speed: number; eta: number | null; error: string; files: string[];
 }
 export interface NodeInfo { id: number; name: string; agent_url: string; vpn: string; public_ip: string | null }
 

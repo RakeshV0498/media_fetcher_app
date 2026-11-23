@@ -15,7 +15,7 @@ button.link { border:0; background:none; color:var(--accent); padding:2px 0; }
 .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; } .actions { margin-top:10px; }
 h3 { margin:0; font-size:1.05rem; } .muted { color:var(--muted); font-weight:400; } .err { color:var(--bad); }
 .badge { font-size:.75rem; border:1px solid var(--line); border-radius:99px; padding:1px 8px; color:var(--muted); }
-.badge.q { color:var(--accent); border-color:var(--accent); } .st-done { color:#2e9e5b; } .st-failed { color:var(--bad); }
+.badge.q { color:var(--accent); border-color:var(--accent); } .st-done { color:#2e9e5b; } .st-failed, .st-needs_attention, .st-duplicate { color:var(--bad); }
 .variants { list-style:none; padding:0; margin:10px 0 4px; } .variants label { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:3px 0; }
 .filters, .bulk { margin-bottom:12px; } .bulk { background:var(--card); padding:8px 12px; border:1px solid var(--accent); border-radius:8px; }
 .form label { display:flex; flex-direction:column; gap:3px; margin:8px 0; font-size:.9rem; } .form textarea { font-family:monospace; }

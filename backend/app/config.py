@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     session_hours: int = 24 * 7
     download_client: str = "mock"  # mock | qbittorrent
     vpn_ok_override: bool = False  # tests only
+    jellyfin_url: str = ""
+    jellyfin_api_key: str = ""
+    media_roots: str = ""  # comma-separated allowed final roots; empty = unrestricted
     scan_min_delay: float = 1.0
     scan_max_delay: float = 4.0
 

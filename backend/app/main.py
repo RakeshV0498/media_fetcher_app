@@ -22,6 +22,12 @@ def migrate() -> None:
     command.upgrade(Config(str(ini)), "head")
 
 
+def _process_completed() -> None:
+    from .download import service
+    with SessionLocal() as db:
+        service.process_completed(db)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     Path("data").mkdir(exist_ok=True)
@@ -31,6 +37,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     scheduler.start()
     scheduler.scheduler.add_job(releases.unsnooze_due, "interval", minutes=5,
                                 id="unsnooze", replace_existing=True)
+    scheduler.scheduler.add_job(_process_completed, "interval", seconds=30,
+                                id="postprocess", replace_existing=True, max_instances=1)
     yield
     scheduler.stop()
 

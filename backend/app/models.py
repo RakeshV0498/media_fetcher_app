@@ -96,6 +96,8 @@ class Download(Base):
     client_id: Mapped[str] = mapped_column(String, default="")
     status: Mapped[str] = mapped_column(String, default="queued")
     error: Mapped[str] = mapped_column(String, default="")
+    content_path: Mapped[str] = mapped_column(String, default="")
+    final_files: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     release: Mapped[Release] = relationship()
     variant: Mapped[Variant] = relationship()
