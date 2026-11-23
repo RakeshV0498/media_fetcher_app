@@ -422,3 +422,35 @@ def test_qbit_add_json_failure_is_an_error_but_204_is_fine():
         c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d")
     add.mock(return_value=httpx.Response(204))
     assert c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d").startswith("mf-")
+
+
+class BrokenQbit(FakeQbit):
+    def __init__(self, exc):
+        super().__init__()
+        self.exc = exc
+
+    def add(self, uri, category, save_path):
+        raise self.exc
+
+
+@respx.mock
+@pytest.mark.parametrize("exc,expect", [
+    (RuntimeError("qBittorrent rejected the torrent (200: Fails.)"), "rejected the torrent"),
+    (httpx.ConnectError("connection refused"), "connection refused"),
+])
+def test_client_errors_become_clear_409s_not_500s(db, real_setup, monkeypatch, exc, expect):
+    rel, var, tag, _ = real_setup
+    monkeypatch.setitem(service._qbit, f"pi4|{QB}", BrokenQbit(exc))
+    _agent_ok()
+    with pytest.raises(service.ApproveError, match="download client error") as ei:
+        service.approve(db, rel.id, var.id, tag.id)
+    assert ei.value.status == 502 and expect in ei.value.message
+    assert rel.status == "new"                                              # nothing half-done
+
+
+def test_missing_qbit_url_is_a_clear_error(db, real_setup, monkeypatch):
+    rel, var, tag, _ = real_setup
+    monkeypatch.setattr(service, "_qbit", {})
+    tag.node.qbit_url = ""
+    with pytest.raises(service.ApproveError, match="no qBittorrent URL"):
+        service.approve(db, rel.id, var.id, tag.id)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -74,7 +75,10 @@ def approve(db: Session, release_id: int, variant_id: int, tag_id: int,
     tag = db.get(Tag, tag_id)
     if not rel or not var or not tag:
         raise ApproveError(404, "release, variant or tag not found")
-    client = client or get_client(tag.node)
+    try:
+        client = client or get_client(tag.node)
+    except RuntimeError as e:  # e.g. no qBittorrent URL configured for the node
+        raise ApproveError(409, str(e)) from e
     if var.release_id != rel.id:
         raise ApproveError(400, "variant does not belong to this release")
     if rel.status not in ("new", "snoozed"):
@@ -105,7 +109,10 @@ def approve(db: Session, release_id: int, variant_id: int, tag_id: int,
     uri = var.magnet or var.torrent_url or var.link
     if not uri:
         raise ApproveError(400, "variant has no magnet or torrent link")
-    cid = client.add(uri, tag.qbit_category, save_path)
+    try:
+        cid = client.add(uri, tag.qbit_category, save_path)
+    except (RuntimeError, httpx.HTTPError) as e:  # qBittorrent refused it / unreachable: tell the user why
+        raise ApproveError(502, f"download client error: {e}") from e
     dl = Download(release_id=rel.id, variant_id=var.id, tag_id=tag.id,
                   node_name=tag.node.name if tag.node else "", client_id=cid, status="downloading")
     rel.status = "approved"
