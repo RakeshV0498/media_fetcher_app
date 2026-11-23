@@ -13,6 +13,7 @@ from .api import downloads, misc, releases, sources, tags
 from .auth import require_user
 from .config import settings
 from .db import SessionLocal
+from .notify import telegram
 from .scanner import scheduler
 from .seed import seed
 
@@ -20,6 +21,16 @@ from .seed import seed
 def migrate() -> None:
     ini = Path(__file__).resolve().parent.parent / "alembic.ini"
     command.upgrade(Config(str(ini)), "head")
+
+
+def _enrich_and_notify() -> None:
+    import httpx
+
+    from .parsing.enrich import enrich_pending
+    with SessionLocal() as db:
+        enrich_pending(db)
+        with httpx.Client(timeout=15) as http:
+            telegram.notify_new(db, http)
 
 
 def _process_completed() -> None:
@@ -39,7 +50,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
                                 id="unsnooze", replace_existing=True)
     scheduler.scheduler.add_job(_process_completed, "interval", seconds=30,
                                 id="postprocess", replace_existing=True, max_instances=1)
+    scheduler.scheduler.add_job(_enrich_and_notify, "interval", minutes=1,
+                                id="enrich", replace_existing=True, max_instances=1)
+    telegram.start()
     yield
+    telegram.stop()
     scheduler.stop()
 
 

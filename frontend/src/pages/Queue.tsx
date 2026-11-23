@@ -24,11 +24,15 @@ function Card({ r, tags, sources, selected, onSelect, notify, reload }: {
 
   return (
     <article className="card">
+      <div className="media">
+        {r.poster_url && <img className="poster" src={r.poster_url} alt="" loading="lazy" />}
+        <div className="grow">
       <div className="row">
         {r.status === "new" && <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} aria-label="select" />}
         <h3>{r.title} {r.year ?? ""} <span className="muted">{fmtEp(r)}</span></h3>
         <span className="badge">{r.kind}</span>
       </div>
+      {r.overview && <p className="muted overview">{r.overview}</p>}
       <ul className="variants">
         {shown.map((v) => (
           <li key={v.id}>
@@ -61,6 +65,8 @@ function Card({ r, tags, sources, selected, onSelect, notify, reload }: {
           <button onClick={() => act("snooze", { hours: 24 }, "Snoozed 24h")}>Snooze</button>
         </div>
       ) : null}
+        </div>
+      </div>
     </article>
   );
 }

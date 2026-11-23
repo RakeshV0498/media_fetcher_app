@@ -18,7 +18,8 @@ def _card(r: Release, quality: str, all_variants: bool) -> dict:
     return {
         "id": r.id, "title": r.title, "year": r.year, "season": r.season,
         "episode": r.episode, "absolute_episode": r.absolute_episode, "kind": r.kind,
-        "status": r.status, "suggested_tag_id": r.suggested_tag_id,
+        "status": r.status, "poster_url": r.poster_url, "overview": r.overview,
+        "genres": r.genres, "suggested_tag_id": r.suggested_tag_id,
         "variant_count": len(r.variants),
         "variants": [{
             "id": v.id, "source_id": v.source_id, "quality": v.quality, "codec": v.codec,

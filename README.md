@@ -19,3 +19,12 @@ Finished torrents are stopped (never seeded), then filed as
 under the tag's final folder, and Jellyfin is refreshed. An existing show folder is reused.
 Unknown season (e.g. anime absolute numbers) -> *needs attention*: set the season in the
 Downloads page and it is filed; existing files are never overwritten (*duplicate*).
+
+## Enrichment & Telegram
+- Set `TMDB_API_KEY` for posters, overviews, better tag suggestions and automatic anime
+  absolute-episode -> season/episode mapping (e.g. One Piece 1056). AniList needs no key.
+  Without a key everything still works; unresolved anime fall back to *Set season…*.
+- Telegram is off unless `TELEGRAM_ENABLED=true` with `TELEGRAM_BOT_TOKEN` and
+  `TELEGRAM_CHAT_ID`. New releases arrive with one button per top-ranked variant plus Reject.
+  Only your chat id is obeyed, and Approve uses the same download gate as the web UI
+  (it needs a suggested tag; otherwise pick it in the web UI).

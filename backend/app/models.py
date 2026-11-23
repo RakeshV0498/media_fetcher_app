@@ -61,6 +61,11 @@ class Release(Base):
     suggested_tag_id: Mapped[int | None] = mapped_column(ForeignKey("tags.id"), nullable=True)
     status: Mapped[str] = mapped_column(String, default="new")
     snoozed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    poster_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    overview: Mapped[str | None] = mapped_column(String, nullable=True)
+    genres: Mapped[list] = mapped_column(JSON, default=list)
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     variants: Mapped[list[Variant]] = relationship(back_populates="release", cascade="all, delete-orphan")
 
@@ -108,3 +113,11 @@ class Setting(Base):
     __tablename__ = "settings"
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str] = mapped_column(String, default="")
+
+
+class ShowMeta(Base):
+    """Cache of TMDB/AniList lookups keyed by kind + normalized title (+ year)."""
+    __tablename__ = "show_meta"
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -101,6 +101,15 @@ def finalize(db: Session, dl: Download, client: DownloadClient | None = None,
         dl.status = "done"  # mock/no files to file
         db.commit()
         return dl
+    if rel.kind == "tv" and rel.season is None:
+        try:  # last chance to resolve absolute numbering automatically
+            import httpx
+
+            from ..parsing.enrich import enrich_release
+            with httpx.Client(timeout=15) as http:
+                enrich_release(db, rel, http)
+        except Exception:
+            pass
     dl.status, dl.error = "moving", ""
     db.commit()
     if dl.client_id:  # stop + drop from client, keep files; never seed

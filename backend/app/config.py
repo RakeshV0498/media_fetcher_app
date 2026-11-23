@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     jellyfin_url: str = ""
     jellyfin_api_key: str = ""
     media_roots: str = ""  # comma-separated allowed final roots; empty = unrestricted
+    tmdb_api_key: str = ""
+    telegram_enabled: bool = False
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    app_base_url: str = ""  # shown in Telegram messages, e.g. http://pi5.lan:8000
     scan_min_delay: float = 1.0
     scan_max_delay: float = 4.0
 
