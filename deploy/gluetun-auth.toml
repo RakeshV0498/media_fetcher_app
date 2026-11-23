@@ -1,0 +1,5 @@
+# Read-only access for the node agent to gluetun's control server (no auth, LAN/compose network only).
+[[roles]]
+name = "agent"
+routes = ["GET /v1/vpn/status", "GET /v1/openvpn/status", "GET /v1/publicip/ip"]
+auth = "none"

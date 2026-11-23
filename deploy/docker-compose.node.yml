@@ -1,0 +1,59 @@
+# Download node (one per Pi). Run:  docker compose -f deploy/docker-compose.node.yml --env-file node.env up -d
+# qBittorrent shares gluetun's network namespace => if the VPN is down there is NO connectivity (kill switch).
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    environment:   # everything comes from node.env - no provider is hardcoded
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:?set VPN_SERVICE_PROVIDER in node.env}
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:-}
+      WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-}
+      OPENVPN_USER: ${OPENVPN_USER:-}
+      OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES:-}
+      VPN_PORT_FORWARDING: ${VPN_PORT_FORWARDING:-off}
+      FIREWALL_OUTBOUND_SUBNETS: ${LAN_SUBNET:-192.168.1.0/24}   # lets the LAN reach qBittorrent's WebUI
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./gluetun-auth.toml:/gluetun/auth/config.toml:ro
+    ports:
+      - "8080:8080"   # qBittorrent WebUI (published via gluetun's namespace)
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    network_mode: "service:gluetun"          # KILL SWITCH: no VPN = no traffic
+    depends_on:
+      gluetun: {condition: service_healthy}
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      WEBUI_PORT: 8080
+      TZ: ${TZ:-UTC}
+    volumes:
+      - qbit-config:/config
+      # Mount host paths at the SAME path inside the container so content paths match the agent's:
+      - ${DOWNLOADS_DIR:-/mnt/downloads}:${DOWNLOADS_DIR:-/mnt/downloads}
+    restart: unless-stopped
+
+  agent:
+    build: {context: .., dockerfile: node_agent/Dockerfile}
+    environment:
+      NODE_AGENT_TOKEN: ${NODE_AGENT_TOKEN:?set NODE_AGENT_TOKEN in node.env}
+      MEDIA_ROOTS: ${MEDIA_ROOTS:?comma-separated final media roots}
+      DOWNLOAD_ROOTS: ${DOWNLOAD_ROOTS:-${DOWNLOADS_DIR:-/mnt/downloads}}
+      GLUETUN_URL: http://gluetun:8000
+    volumes:
+      - ${DOWNLOADS_DIR:-/mnt/downloads}:${DOWNLOADS_DIR:-/mnt/downloads}
+      # One line per media disk on this Pi (same path inside and out), e.g.:
+      # - /mnt/disk1:/mnt/disk1
+      # - /mnt/disk2:/mnt/disk2
+    ports:
+      - "8800:8800"   # controller -> agent (LAN only; protected by NODE_AGENT_TOKEN)
+    depends_on: [gluetun]
+    restart: unless-stopped
+
+volumes:
+  qbit-config:

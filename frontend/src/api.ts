@@ -49,7 +49,10 @@ export interface Download {
   id: number; title: string; season: number | null; episode: number | null; quality: string | null;
   tag: string; node: string; status: string; progress: number; speed: number; eta: number | null; error: string; files: string[];
 }
-export interface NodeInfo { id: number; name: string; agent_url: string; vpn: string; public_ip: string | null }
+export interface NodeInfo {
+  id: number; name: string; agent_url: string; qbit_url: string; max_concurrent: number;
+  vpn_ok: boolean; vpn: string; public_ip: string | null; home_ip: string | null;
+}
 
 export const fmtSize = (b: number | null) =>
   b == null ? "?" : b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : `${Math.round(b / 1e6)} MB`;

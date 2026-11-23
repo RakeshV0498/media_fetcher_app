@@ -24,7 +24,7 @@ def upgrade() -> None:
     with op.batch_alter_table('releases', schema=None) as batch_op:
         batch_op.add_column(sa.Column('poster_url', sa.String(), nullable=True))
         batch_op.add_column(sa.Column('overview', sa.String(), nullable=True))
-        batch_op.add_column(sa.Column('genres', sa.JSON(), nullable=False))
+        batch_op.add_column(sa.Column('genres', sa.JSON(), nullable=False, server_default='[]'))
         batch_op.add_column(sa.Column('enriched_at', sa.DateTime(timezone=True), nullable=True))
         batch_op.add_column(sa.Column('notified_at', sa.DateTime(timezone=True), nullable=True))
 

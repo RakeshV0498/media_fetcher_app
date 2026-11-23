@@ -11,3 +11,5 @@ frontend/dist/
 data/
 *.db
 *.sqlite3
+node.env
+deploy/node.env

@@ -11,10 +11,12 @@ router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
 @router.get("")
 def list_downloads(db: Session = Depends(get_db)) -> list[dict]:
-    client = service.get_client()
     out = []
     for d in service.list_downloads(db):
-        p = client.status(d.client_id) if d.client_id else None
+        try:
+            p = service.get_client(d.tag.node).status(d.client_id) if d.client_id else None
+        except Exception as e:
+            p, d.error = None, f"client unreachable: {e}"[:200]
         if p and p.state != d.status:
             d.status = p.state
         out.append({
@@ -38,7 +40,7 @@ def _dl(db: Session, did: int) -> Download:
 @router.post("/{did}/pause")
 def pause(did: int, db: Session = Depends(get_db)) -> dict:
     d = _dl(db, did)
-    service.get_client().pause(d.client_id)
+    service.get_client(d.tag.node).pause(d.client_id)
     d.status = "paused"
     db.commit()
     return {"status": d.status}
@@ -47,7 +49,7 @@ def pause(did: int, db: Session = Depends(get_db)) -> dict:
 @router.post("/{did}/resume")
 def resume(did: int, db: Session = Depends(get_db)) -> dict:
     d = _dl(db, did)
-    service.get_client().resume(d.client_id)
+    service.get_client(d.tag.node).resume(d.client_id)
     d.status = "downloading"
     db.commit()
     return {"status": d.status}
@@ -56,7 +58,7 @@ def resume(did: int, db: Session = Depends(get_db)) -> dict:
 @router.delete("/{did}", status_code=204)
 def remove(did: int, db: Session = Depends(get_db)) -> None:
     d = _dl(db, did)
-    service.get_client().remove(d.client_id)
+    service.get_client(d.tag.node).remove(d.client_id)
     db.delete(d)
     db.commit()
 

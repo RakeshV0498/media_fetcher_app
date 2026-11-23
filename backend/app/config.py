@@ -13,7 +13,14 @@ class Settings(BaseSettings):
     auth_password_hash: str = ""
     session_hours: int = 24 * 7
     download_client: str = "mock"  # mock | qbittorrent
-    vpn_ok_override: bool = False  # tests only
+    qbit_username: str = "admin"
+    qbit_password: str = ""
+    node_agent_token: str = ""
+    node_pi5_url: str = ""
+    node_pi5_qbit_url: str = ""
+    node_pi4_url: str = ""
+    node_pi4_qbit_url: str = ""
+    min_free_reserve_gb: int = 5
     jellyfin_url: str = ""
     jellyfin_api_key: str = ""
     media_roots: str = ""  # comma-separated allowed final roots; empty = unrestricted

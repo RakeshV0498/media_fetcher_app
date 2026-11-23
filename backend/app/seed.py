@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .models import Node, Setting, Tag
 
 NODES = ["pi5", "pi4"]
@@ -21,6 +22,13 @@ def seed(db: Session) -> None:
         if name not in nodes:
             nodes[name] = Node(name=name)
             db.add(nodes[name])
+    env = {"pi5": (settings.node_pi5_url, settings.node_pi5_qbit_url),
+           "pi4": (settings.node_pi4_url, settings.node_pi4_qbit_url)}
+    for name, (agent, qbit) in env.items():
+        if agent and not nodes[name].agent_url:
+            nodes[name].agent_url = agent
+        if qbit and not nodes[name].qbit_url:
+            nodes[name].qbit_url = qbit
     db.flush()
     have = {t.name for t in db.scalars(select(Tag))}
     for name, kind, node, cat, path in TAGS:
