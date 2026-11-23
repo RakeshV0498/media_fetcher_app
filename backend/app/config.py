@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     downloads_enabled: bool = False  # safe default: downloads OFF
     home_public_ip: str = ""
     user_agent: str = "MediaFetcher/0.1"
+    auth_username: str = "admin"
+    auth_password_hash: str = ""
+    session_hours: int = 24 * 7
+    download_client: str = "mock"  # mock | qbittorrent
+    vpn_ok_override: bool = False  # tests only
     scan_min_delay: float = 1.0
     scan_max_delay: float = 4.0
 

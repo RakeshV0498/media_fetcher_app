@@ -2,6 +2,7 @@ import httpx
 import respx
 from fastapi.testclient import TestClient
 
+from app.auth import require_user
 from app.db import get_db
 from app.main import app
 from app.scanner import scheduler
@@ -14,6 +15,7 @@ def test_sources_scan_and_releases(session_factory, monkeypatch):
         with session_factory() as s:
             yield s
     app.dependency_overrides[get_db] = override
+    app.dependency_overrides[require_user] = lambda: "admin"
     monkeypatch.setattr(scheduler, "SessionLocal", session_factory)
     monkeypatch.setattr("app.scanner.runner.settings.scan_min_delay", 0)
     monkeypatch.setattr("app.scanner.runner.settings.scan_max_delay", 0)

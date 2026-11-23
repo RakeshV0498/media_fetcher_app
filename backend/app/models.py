@@ -28,6 +28,7 @@ class Tag(Base):
     node_id: Mapped[int | None] = mapped_column(ForeignKey("nodes.id"), nullable=True)
     qbit_category: Mapped[str] = mapped_column(String, default="")
     final_path: Mapped[str] = mapped_column(String, default="")
+    node: Mapped[Node | None] = relationship()
 
 
 class Source(Base):
@@ -83,6 +84,22 @@ class Variant(Base):
     link: Mapped[str | None] = mapped_column(String, nullable=True)
     seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     release: Mapped[Release] = relationship(back_populates="variants")
+
+
+class Download(Base):
+    __tablename__ = "downloads"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    release_id: Mapped[int] = mapped_column(ForeignKey("releases.id"))
+    variant_id: Mapped[int] = mapped_column(ForeignKey("variants.id"))
+    tag_id: Mapped[int] = mapped_column(ForeignKey("tags.id"))
+    node_name: Mapped[str] = mapped_column(String, default="")
+    client_id: Mapped[str] = mapped_column(String, default="")
+    status: Mapped[str] = mapped_column(String, default="queued")
+    error: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    release: Mapped[Release] = relationship()
+    variant: Mapped[Variant] = relationship()
+    tag: Mapped[Tag] = relationship()
 
 
 class Setting(Base):

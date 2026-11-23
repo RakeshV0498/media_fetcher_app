@@ -4,9 +4,13 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from .api import releases, sources, tags
+from .api import auth as auth_api
+from .api import downloads, misc, releases, sources, tags
+from .auth import require_user
 from .config import settings
 from .db import SessionLocal
 from .scanner import scheduler
@@ -25,16 +29,29 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     with SessionLocal() as db:
         seed(db)
     scheduler.start()
+    scheduler.scheduler.add_job(releases.unsnooze_due, "interval", minutes=5,
+                                id="unsnooze", replace_existing=True)
     yield
     scheduler.stop()
 
 
 app = FastAPI(title="Media Fetcher", lifespan=lifespan)
-app.include_router(sources.router)
-app.include_router(tags.router)
-app.include_router(releases.router)
+app.include_router(auth_api.router)
+_protected = [Depends(require_user)]
+for _r in (sources.router, tags.router, releases.router, downloads.router, misc.router):
+    app.include_router(_r, dependencies=_protected)
 
 
 @app.get("/api/health")
 def health() -> dict[str, object]:
     return {"status": "ok", "downloads_enabled": settings.downloads_enabled}
+
+
+DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa(path: str) -> FileResponse:
+        f = DIST / path
+        return FileResponse(f if path and f.is_file() else DIST / "index.html")
