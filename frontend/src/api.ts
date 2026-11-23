@@ -50,7 +50,7 @@ export interface Download {
   tag: string; node: string; status: string; progress: number; speed: number; eta: number | null; error: string; files: string[];
 }
 export interface NodeInfo {
-  id: number; name: string; agent_url: string; qbit_url: string; max_concurrent: number;
+  id: number; name: string; agent_url: string; qbit_url: string; download_dir: string; max_concurrent: number;
   vpn_ok: boolean; vpn: string; public_ip: string | null; home_ip: string | null;
 }
 

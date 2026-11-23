@@ -34,6 +34,7 @@ def put_settings(body: SettingsIO, db: Session = Depends(get_db)) -> dict:
 class NodeIn(BaseModel):
     agent_url: str = ""
     qbit_url: str = ""
+    download_dir: str = ""
     max_concurrent: int = 2
 
 
@@ -45,7 +46,7 @@ def _node_status(n: Node) -> dict:
         v = agent.vpn(settings.home_public_ip)
         info = {"vpn_ok": v.gate.allowed, "vpn": "protected" if v.gate.allowed else v.gate.reason,
                 "public_ip": v.vpn_ip, "home_ip": v.home_ip}
-    return {"id": n.id, "name": n.name, "agent_url": n.agent_url, "qbit_url": n.qbit_url,
+    return {"id": n.id, "name": n.name, "agent_url": n.agent_url, "qbit_url": n.qbit_url, "download_dir": n.download_dir,
             "max_concurrent": n.max_concurrent, **info}
 
 
@@ -61,6 +62,7 @@ def update_node(nid: int, body: NodeIn, db: Session = Depends(get_db)) -> dict:
     if not n:
         raise HTTPException(404, "node not found")
     n.agent_url, n.qbit_url, n.max_concurrent = body.agent_url, body.qbit_url, max(1, body.max_concurrent)
+    n.download_dir = body.download_dir.strip()
     db.commit()
     return _node_status(n)
 

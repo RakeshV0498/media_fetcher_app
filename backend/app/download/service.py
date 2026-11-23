@@ -45,6 +45,17 @@ def vpn_gate(node: Node | None) -> GateResult:
     return agent.vpn(settings.home_public_ip).gate
 
 
+def download_dir_for(node: Node | None, agent: AgentClient | None) -> str:
+    """Where qBittorrent saves on that Pi: the node setting, else the agent's first DOWNLOAD_ROOT."""
+    if node is not None and node.download_dir.strip():
+        return node.download_dir.strip()
+    if agent is not None:
+        roots = agent.info().get("download_roots") or []
+        if roots:
+            return roots[0]
+    raise ApproveError(409, "no download folder is configured for this node (Settings \u2192 Nodes & VPN)")
+
+
 class ApproveError(Exception):
     def __init__(self, status: int, message: str) -> None:
         super().__init__(message)
@@ -74,18 +85,23 @@ def approve(db: Session, release_id: int, variant_id: int, tag_id: int,
                       client.is_mock)
     if not gate.allowed:
         raise ApproveError(409, gate.reason)
+    save_path = tag.final_path  # mock client only; real clients use the node's download folder
     if not client.is_mock:
+        agent = agent_for(tag.node)
         try:
-            free = agent_for(tag.node).free_bytes(tag.final_path)  # type: ignore[union-attr]
+            save_dir = download_dir_for(tag.node, agent)  # type: ignore[arg-type]
+            save_path = f"{save_dir.rstrip('/')}/{tag.qbit_category or 'misc'}"
+            for where in {save_dir, tag.final_path}:  # data lands in one, ends up in the other
+                free = agent.free_bytes(where)  # type: ignore[union-attr]
+                space = enough_space(free, var.size_bytes, settings.min_free_reserve_gb * 1024**3)
+                if not space.allowed:
+                    raise ApproveError(409, f"{space.reason} (in {where})")
         except AgentError as e:
             raise ApproveError(409, f"disk space check failed: {e}") from e
-        space = enough_space(free, var.size_bytes, settings.min_free_reserve_gb * 1024**3)
-        if not space.allowed:
-            raise ApproveError(409, space.reason)
     uri = var.magnet or var.torrent_url or var.link
     if not uri:
         raise ApproveError(400, "variant has no magnet or torrent link")
-    cid = client.add(uri, tag.qbit_category, tag.final_path)
+    cid = client.add(uri, tag.qbit_category, save_path)
     dl = Download(release_id=rel.id, variant_id=var.id, tag_id=tag.id,
                   node_name=tag.node.name if tag.node else "", client_id=cid, status="downloading")
     rel.status = "approved"

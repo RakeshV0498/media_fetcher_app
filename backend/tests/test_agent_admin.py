@@ -68,3 +68,13 @@ def test_agent_vpn_settings_need_gluetun_api_key(agent, monkeypatch):
     monkeypatch.delenv("GLUETUN_API_KEY")
     r = c.get("/vpn/settings")
     assert r.status_code == 503 and "GLUETUN_API_KEY" in r.json()["detail"]
+
+
+def test_agent_info_and_disk_cover_download_roots(agent, tmp_path):
+    c, media, _ = agent
+    dl = tmp_path / "dl"
+    dl.mkdir()
+    info = c.get("/info").json()
+    assert info["media_roots"] == [str(media)] and info["download_roots"] == [str(dl)]
+    assert c.get("/disk", params={"path": str(dl / "tv")}).json()["free_bytes"] > 0      # download folder is checkable
+    assert c.get("/disk", params={"path": str(tmp_path / "elsewhere")}).status_code == 403

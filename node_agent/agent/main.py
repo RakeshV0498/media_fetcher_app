@@ -70,12 +70,17 @@ def vpn() -> dict[str, str | None]:
     return out
 
 
+@app.get("/info")
+def info() -> dict[str, list[str]]:
+    return {"download_roots": [str(r) for r in _roots("DOWNLOAD_ROOTS")], "media_roots": [str(r) for r in _roots("MEDIA_ROOTS")]}
+
+
 @app.get("/disk")
 def disk(path: str) -> dict[str, int]:
-    roots = _roots("MEDIA_ROOTS")
+    roots = _roots("MEDIA_ROOTS") + _roots("DOWNLOAD_ROOTS")
     p = Path(path)
     if not roots or not _inside(p, roots):
-        raise HTTPException(403, f"{path} is outside MEDIA_ROOTS")
+        raise HTTPException(403, f"{path} is outside MEDIA_ROOTS / DOWNLOAD_ROOTS")
     while not p.exists() and p != p.parent:
         p = p.parent
     return {"free_bytes": shutil.disk_usage(p).free}

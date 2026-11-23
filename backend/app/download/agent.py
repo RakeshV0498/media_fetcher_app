@@ -48,6 +48,12 @@ class AgentClient:
         running = d.get("vpn_status") == "running"
         return VpnInfo(vpn_healthy(running, d.get("vpn_ip"), home), running, d.get("vpn_ip"), home)
 
+    def info(self) -> dict:
+        r = self._call("GET", "/info")
+        if r.status_code != 200:
+            raise AgentError(f"node info failed ({r.status_code})")
+        return r.json()
+
     def free_bytes(self, path: str) -> int:
         r = self._call("GET", "/disk", params={"path": path})
         if r.status_code != 200:

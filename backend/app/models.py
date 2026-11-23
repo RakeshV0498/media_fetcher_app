@@ -18,6 +18,7 @@ class Node(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
     agent_url: Mapped[str] = mapped_column(String, default="")
     qbit_url: Mapped[str] = mapped_column(String, default="")
+    download_dir: Mapped[str] = mapped_column(String, default="")  # where qBittorrent saves; blank = agent default
     max_concurrent: Mapped[int] = mapped_column(Integer, default=2)
 
 

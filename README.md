@@ -88,3 +88,10 @@ Tears of Steel, Cosmos Laundromat: public domain / Creative Commons Blender film
 flow (scan -> review -> approve -> download -> file) with content that is legal to download. Delete it any time;
 it is not re-added. When a site has no feed and no selectors, the Sources page says so and offers **Add selectors**;
 selectors also accept an optional `title_regex` to trim extra text from titles.
+
+## Where do downloads go?
+qBittorrent saves into the node's **download folder** (`DOWNLOADS_DIR` in `node.env`, or *Settings -> Nodes & VPN ->
+Download folder*), in a sub-folder named after the tag's category. When a download finishes, the node agent moves the
+video into the tag's **library folder** (`Title (Year)/...` or `Show/Season NN/...`) and the **Downloads** page lists the
+final path. Keep the download folder on the same disk as the library so the move is an instant rename. Both folders must be
+mounted at the same path inside the qBittorrent and agent containers (see `docker-compose.node.yml`).

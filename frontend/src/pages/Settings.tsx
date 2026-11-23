@@ -169,7 +169,7 @@ function Nodes({ notify, fields, reload }: { notify: ToastFn; fields: AppField[]
   const load = useCallback(() => { api<NodeInfo[]>("/api/nodes").then(setNodes).catch((e) => notify(e.message, true)); }, [notify]);
   useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
   const patch = (id: number, p: Partial<NodeInfo>) => setNodes((l) => l && l.map((n) => (n.id === id ? { ...n, ...p } : n)));
-  const save = (n: NodeInfo) => api("/api/nodes/" + n.id, "PUT", { agent_url: n.agent_url, qbit_url: n.qbit_url, max_concurrent: n.max_concurrent })
+  const save = (n: NodeInfo) => api("/api/nodes/" + n.id, "PUT", { agent_url: n.agent_url, qbit_url: n.qbit_url, download_dir: n.download_dir, max_concurrent: n.max_concurrent })
     .then(() => { notify(`Saved ${n.name}`); load(); }).catch((e) => notify(e.message, true));
   const test = async (n: NodeInfo) => {
     try {
@@ -192,6 +192,7 @@ function Nodes({ notify, fields, reload }: { notify: ToastFn; fields: AppField[]
             <dl className="kv"><div><dt>VPN IP</dt><dd className="mono">{n.public_ip ?? "–"}</dd></div><div><dt>Home IP</dt><dd className="mono">{n.home_ip ?? "–"}</dd></div></dl>
             <label className="field"><span className="lbl">Node agent URL</span><input className="mono" value={n.agent_url} placeholder="http://pi4.lan:8800" onChange={(e) => patch(n.id, { agent_url: e.target.value })} /></label>
             <label className="field"><span className="lbl">qBittorrent WebUI URL</span><input className="mono" value={n.qbit_url} placeholder="http://pi4.lan:8080" onChange={(e) => patch(n.id, { qbit_url: e.target.value })} /></label>
+            <label className="field"><span className="lbl">Download folder on this Pi</span><input className="mono" value={n.download_dir} placeholder="blank = the node's DOWNLOADS_DIR" onChange={(e) => patch(n.id, { download_dir: e.target.value })} /><span className="hint">Where qBittorrent saves while downloading. Finished files are then moved into the library folder. Put it on the same disk as your library for instant moves.</span></label>
             <label className="field"><span className="lbl">Max concurrent downloads</span><input type="number" min={1} value={n.max_concurrent} onChange={(e) => patch(n.id, { max_concurrent: Number(e.target.value) })} /></label>
             <div className="form-actions"><button className="btn primary" onClick={() => save(n)}><Icon name="check" size={16} />Save</button><button className="btn" onClick={() => test(n)}><Icon name="refresh" size={16} />Test connection</button></div>
             <VpnSection node={n} notify={notify} onApplied={load} />

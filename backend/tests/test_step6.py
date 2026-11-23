@@ -229,7 +229,7 @@ def real_setup(db, monkeypatch):
     monkeypatch.setattr(settings, "downloads_enabled", True)
     monkeypatch.setattr(settings, "home_public_ip", "")
     node = db.scalar(select(Node).where(Node.name == "pi4"))
-    node.agent_url, node.qbit_url = AGENT, QB
+    node.agent_url, node.qbit_url, node.download_dir = AGENT, QB, "/mnt/dl"
     tag = db.scalar(select(Tag).where(Tag.name == "TV Show"))
     tag.final_path = "/mnt/disk2/tv"
     src = Source(name="s", url="u")
@@ -258,7 +258,8 @@ def test_approve_real_client_happy_path(db, real_setup):
     rel, var, tag, fake = real_setup
     _agent_ok()
     dl = service.approve(db, rel.id, var.id, tag.id)
-    assert fake.added == [("magnet:?xt=urn:btih:1", "tv", "/mnt/disk2/tv")] and dl.node_name == "pi4"
+    # qBittorrent must save into the node's DOWNLOAD folder (which it can see), never the library folder
+    assert fake.added == [("magnet:?xt=urn:btih:1", "tv", "/mnt/dl/tv")] and dl.node_name == "pi4"
 
 
 @respx.mock
@@ -307,3 +308,41 @@ def test_finalize_delegates_move_to_node_agent(db, real_setup, monkeypatch):
     respx.post(f"{AGENT}/postprocess").mock(side_effect=httpx.ConnectError("down"))
     service.finalize(db, d, fake)
     assert d.status == "failed" and "unreachable" in d.error
+
+
+@respx.mock
+def test_download_dir_defaults_to_agent_root_and_both_disks_are_checked(db, real_setup):
+    rel, var, tag, fake = real_setup
+    tag.node.download_dir = ""                                              # blank -> ask the agent
+    respx.get(f"{AGENT}/info").mock(return_value=httpx.Response(200, json={"download_roots": ["/mnt/agent-dl"], "media_roots": []}))
+    respx.get(f"{AGENT}/vpn").mock(return_value=httpx.Response(200, json={
+        "vpn_status": "running", "vpn_ip": "5.5.5.5", "home_ip": "1.1.1.1"}))
+    disk = respx.get(f"{AGENT}/disk").mock(return_value=httpx.Response(200, json={"free_bytes": 500 * 1024**3}))
+    service.approve(db, rel.id, var.id, tag.id)
+    assert fake.added[0][2] == "/mnt/agent-dl/tv"
+    checked = {c.request.url.params["path"] for c in disk.calls}
+    assert checked == {"/mnt/agent-dl", "/mnt/disk2/tv"}                    # where it lands AND where it ends up
+
+
+@respx.mock
+def test_no_download_dir_anywhere_blocks_approval(db, real_setup):
+    rel, var, tag, fake = real_setup
+    tag.node.download_dir = ""
+    respx.get(f"{AGENT}/info").mock(return_value=httpx.Response(200, json={"download_roots": [], "media_roots": []}))
+    respx.get(f"{AGENT}/vpn").mock(return_value=httpx.Response(200, json={
+        "vpn_status": "running", "vpn_ip": "5.5.5.5", "home_ip": "1.1.1.1"}))
+    with pytest.raises(service.ApproveError, match="no download folder"):
+        service.approve(db, rel.id, var.id, tag.id)
+    assert fake.added == []
+
+
+@respx.mock
+def test_download_disk_full_blocks_even_if_library_disk_has_room(db, real_setup):
+    rel, var, tag, fake = real_setup
+    respx.get(f"{AGENT}/vpn").mock(return_value=httpx.Response(200, json={
+        "vpn_status": "running", "vpn_ip": "5.5.5.5", "home_ip": "1.1.1.1"}))
+    respx.get(f"{AGENT}/disk", params={"path": "/mnt/dl"}).mock(return_value=httpx.Response(200, json={"free_bytes": 1024**3}))
+    respx.get(f"{AGENT}/disk", params={"path": "/mnt/disk2/tv"}).mock(return_value=httpx.Response(200, json={"free_bytes": 900 * 1024**3}))
+    with pytest.raises(service.ApproveError, match=r"disk space.*/mnt/dl"):
+        service.approve(db, rel.id, var.id, tag.id)
+    assert fake.added == []
