@@ -64,7 +64,7 @@ class Release(Base):
     status: Mapped[str] = mapped_column(String, default="new")
     snoozed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     detail_url: Mapped[str | None] = mapped_column(String, nullable=True)  # page listing this entry's versions
-    detail_source_id: Mapped[int | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
+    detail_source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # sources.id (no FK: see migration 0009)
     details_loaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     poster_url: Mapped[str | None] = mapped_column(String, nullable=True)
     overview: Mapped[str | None] = mapped_column(String, nullable=True)
