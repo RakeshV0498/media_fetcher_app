@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,6 +16,7 @@ from .gate import GateResult, check_gate, enough_space
 from .mock import MockClient
 from .qbittorrent import QBittorrentClient
 
+STALE_AFTER = timedelta(minutes=10)
 _client: DownloadClient | None = None  # mock-mode singleton (tests may inject a client here)
 _qbit: dict[str, DownloadClient] = {}
 
@@ -55,6 +58,18 @@ def download_dir_for(node: Node | None, agent: AgentClient | None) -> str:
         if roots:
             return roots[0]
     raise ApproveError(409, "no download folder is configured for this node (Settings \u2192 Nodes & VPN)")
+
+
+def torrent_uri(var: Variant) -> str | None:
+    """A magnet or a direct .torrent URL. A plain web-page link is NOT a torrent and must not be sent."""
+    if var.magnet:
+        return var.magnet
+    if var.torrent_url:
+        return var.torrent_url
+    link = var.link or ""
+    if link.startswith("magnet:") or link.split("?")[0].lower().endswith(".torrent"):
+        return link
+    return None
 
 
 class ApproveError(Exception):
@@ -106,9 +121,11 @@ def approve(db: Session, release_id: int, variant_id: int, tag_id: int,
                     raise ApproveError(409, f"{space.reason} (in {where})")
         except AgentError as e:
             raise ApproveError(409, f"disk space check failed: {e}") from e
-    uri = var.magnet or var.torrent_url or var.link
+    uri = torrent_uri(var)
     if not uri:
-        raise ApproveError(400, "variant has no magnet or torrent link")
+        raise ApproveError(400, "this version has no magnet or .torrent link"
+                                + (f" (only a web page: {var.link})" if var.link else "")
+                                + ". Add a 'magnet' or 'torrent' selector to its source, or pick another version.")
     try:
         cid = client.add(uri, tag.qbit_category, save_path)
     except (RuntimeError, httpx.HTTPError) as e:  # qBittorrent refused it / unreachable: tell the user why
@@ -212,6 +229,15 @@ def process_completed(db: Session, client: DownloadClient | None = None) -> int:
             elif p and p.state == "failed":
                 dl.status, dl.error = "failed", "download client reported an error"
                 db.commit()
+            elif p is None and dl.client_id and dl.status == "downloading":
+                age = datetime.now(timezone.utc) - dl.created_at.replace(tzinfo=timezone.utc)
+                if age > STALE_AFTER:  # the node's qBittorrent has never listed (or lost) this torrent
+                    dl.status = "failed"
+                    dl.error = (f"qBittorrent on {dl.node_name or 'the node'} does not list this torrent "
+                                f"(not seen for {int(age.total_seconds() // 60)} min). It may have been removed, "
+                                "never been added, or the node's qBittorrent URL points at a different machine. "
+                                "Check Settings \u2192 Nodes & VPN, then remove this entry and approve again.")
+                    db.commit()
         except Exception as e:  # one unreachable node must not block the others
             dl.error = f"client unreachable: {e}"[:200]
             db.commit()

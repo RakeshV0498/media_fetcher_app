@@ -170,3 +170,22 @@ def test_finalize_missing_files_marks_failed(db, tmp_path):
     d = _download(db, tmp_path, "English Movie", title="Dune", kind="movie", year=2021)
     service.finalize(db, d, FinishedClient(tmp_path / "gone.mkv"))
     assert d.status == "failed" and "not found" in d.error
+
+
+def test_unlisted_torrent_is_flagged_failed_only_after_the_grace_period(db, tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    class Unknown(MockClient):
+        def status(self, cid):
+            return None
+
+    d = _download(db, tmp_path, "English Movie", title="Sintel", kind="movie")
+    d.node_name = "pi5"
+    d.created_at = datetime.now(timezone.utc) - timedelta(minutes=2)
+    db.commit()
+    service.process_completed(db, Unknown())
+    assert d.status == "downloading"                                        # still within the grace period
+    d.created_at = datetime.now(timezone.utc) - timedelta(minutes=15)
+    db.commit()
+    service.process_completed(db, Unknown())
+    assert d.status == "failed" and "does not list this torrent" in d.error and "pi5" in d.error

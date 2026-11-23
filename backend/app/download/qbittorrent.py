@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import time
 import uuid
 
 import httpx
@@ -19,12 +21,14 @@ class QBittorrentClient:
     is_mock = False
 
     def __init__(self, base_url: str, username: str, password: str,
-                 http: httpx.Client | None = None, max_active: int | None = None) -> None:
+                 http: httpx.Client | None = None, max_active: int | None = None,
+                 confirm_seconds: float = 15.0, sleep=time.sleep) -> None:
         self.base = base_url.rstrip("/")
         self.user, self.pw = username, password
         self.http = http or httpx.Client(timeout=15)
         self._logged_in = False
         self.max_active = max_active
+        self.confirm_seconds, self._sleep = confirm_seconds, sleep
 
     # -- plumbing
     def _login(self) -> None:
@@ -87,7 +91,44 @@ class QBittorrentClient:
         if isinstance(counts, dict) and counts.get("failure_count", 0) and not counts.get("success_count", 0) \
                 and not counts.get("pending_count", 0):
             raise RuntimeError("qBittorrent rejected the torrent (is it a duplicate or an invalid link?)")
+        self._confirm_listed(tag, uri)
         return tag
+
+    def _add_failure(self, uri: str) -> str | None:
+        """qBittorrent logs 'Failed to add torrent ... Reason: "..."' for async URL adds; surface that reason."""
+        try:
+            r = self._req("GET", "/api/v2/log/main", params={"normal": "false", "info": "false",
+                                                              "warning": "true", "critical": "true"})
+            entries = r.json() if r.status_code == 200 else []
+        except (httpx.HTTPError, ValueError):
+            return None
+        for e in reversed(entries if isinstance(entries, list) else []):
+            msg = str(e.get("message", ""))
+            if "Failed to add torrent" in msg and uri in msg:
+                m = re.search(r'Reason: "(.*?)"', msg)
+                return m.group(1) if m else msg[:160]
+        return None
+
+    def _confirm_listed(self, tag: str, uri: str) -> None:
+        """qBittorrent 5.x answers 202 'pending' before the torrent exists (and may fail afterwards, e.g. a 404
+        .torrent URL). Never record a download that qBittorrent does not actually list."""
+        if self.confirm_seconds <= 0:
+            return
+        waited = 0.0
+        while True:
+            if self._info(tag) is not None:
+                return
+            reason = self._add_failure(uri)
+            if reason:
+                raise RuntimeError(f"qBittorrent could not add it: {reason}. The link may be stale or removed - "
+                                   "check it in the source, or pick another version.")
+            if waited >= self.confirm_seconds:
+                raise RuntimeError(
+                    f"qBittorrent accepted the request but the torrent never appeared in its list within "
+                    f"{int(self.confirm_seconds)}s (is the link a valid magnet / .torrent, and does it have peers or "
+                    "a reachable tracker?)")
+            self._sleep(1.0)
+            waited += 1.0
 
     def status(self, client_id: str) -> Progress | None:
         i = self._info(client_id)

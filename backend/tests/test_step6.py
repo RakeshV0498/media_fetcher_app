@@ -54,7 +54,7 @@ def _qb_mocks():
 def test_qbit_add_sets_no_seeding_and_returns_tag():
     prefs = _qb_mocks()
     add = respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(200, text="Ok."))
-    c = QBittorrentClient(QB, "u", "p", max_active=2)
+    c = QBittorrentClient(QB, "u", "p", max_active=2, confirm_seconds=0)
     cid = c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d/tv")
     body = add.calls[0].request.content.decode()
     assert "ratioLimit=0" in body and "seedingTimeLimit=0" in body and "savepath=%2Fmnt%2Fd%2Ftv" in body
@@ -400,7 +400,7 @@ def test_qbit_login_accepts_204_from_newer_versions():
     respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(204))
     respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
     respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(200, json={"success_count": 1, "failure_count": 0}))
-    c = QBittorrentClient(QB, "u", "p")
+    c = QBittorrentClient(QB, "u", "p", confirm_seconds=0)
     assert c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d").startswith("mf-")      # 204 login, JSON add result
 
 
@@ -417,7 +417,7 @@ def test_qbit_add_json_failure_is_an_error_but_204_is_fine():
     respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
     add = respx.post(f"{QB}/api/v2/torrents/add").mock(
         return_value=httpx.Response(200, json={"success_count": 0, "failure_count": 1, "pending_count": 0}))
-    c = QBittorrentClient(QB, "u", "p")
+    c = QBittorrentClient(QB, "u", "p", confirm_seconds=0)
     with pytest.raises(RuntimeError, match="rejected the torrent"):
         c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d")
     add.mock(return_value=httpx.Response(204))
@@ -463,7 +463,7 @@ def test_qbit_5_queued_add_with_http_202_is_success():
     respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
     add = respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(
         202, json={"added_torrent_ids": [], "failure_count": 0, "pending_count": 1, "success_count": 0}))
-    cid = QBittorrentClient(QB, "u", "p").add("magnet:?xt=urn:btih:abc", "english-movies", "/mnt/dl/english-movies")
+    cid = QBittorrentClient(QB, "u", "p", confirm_seconds=0).add("magnet:?xt=urn:btih:abc", "english-movies", "/mnt/dl/english-movies")
     assert cid.startswith("mf-") and cid in add.calls[0].request.content.decode()
 
 
@@ -475,3 +475,65 @@ def test_qbit_202_without_anything_pending_is_still_a_failure():
         202, json={"added_torrent_ids": [], "failure_count": 1, "pending_count": 0, "success_count": 0}))
     with pytest.raises(RuntimeError, match="rejected the torrent"):
         QBittorrentClient(QB, "u", "p").add("magnet:?xt=urn:btih:abc", "tv", "/mnt/dl/tv")
+
+
+@respx.mock
+def test_add_waits_until_the_torrent_is_listed():
+    respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(204))
+    respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
+    respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(
+        202, json={"added_torrent_ids": [], "failure_count": 0, "pending_count": 1, "success_count": 0}))
+    respx.get(f"{QB}/api/v2/log/main").mock(return_value=httpx.Response(200, json=[]))
+    info = respx.get(f"{QB}/api/v2/torrents/info").mock(side_effect=[
+        httpx.Response(200, json=[]), httpx.Response(200, json=[]),
+        httpx.Response(200, json=[{"hash": "h", "state": "metaDL", "progress": 0}])])
+    waits = []
+    c = QBittorrentClient(QB, "u", "p", confirm_seconds=10, sleep=waits.append)
+    assert c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d").startswith("mf-")
+    assert info.call_count == 3 and waits == [1.0, 1.0]
+
+
+@respx.mock
+def test_add_fails_loudly_when_the_torrent_never_appears():
+    respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(204))
+    respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
+    respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(
+        202, json={"added_torrent_ids": [], "failure_count": 0, "pending_count": 1, "success_count": 0}))
+    respx.get(f"{QB}/api/v2/torrents/info").mock(return_value=httpx.Response(200, json=[]))
+    respx.get(f"{QB}/api/v2/log/main").mock(return_value=httpx.Response(200, json=[]))
+    c = QBittorrentClient(QB, "u", "p", confirm_seconds=3, sleep=lambda _: None)
+    with pytest.raises(RuntimeError, match="never appeared"):
+        c.add("magnet:?xt=urn:btih:abc", "tv", "/mnt/d")
+
+
+@respx.mock
+def test_web_page_link_is_never_sent_to_qbittorrent(db, real_setup):
+    rel, var, tag, fake = real_setup
+    var.magnet, var.torrent_url, var.link = None, None, "https://example.test/movie/123/"
+    db.commit()
+    _agent_ok()
+    with pytest.raises(service.ApproveError, match="no magnet or .torrent link") as e:
+        service.approve(db, rel.id, var.id, tag.id)
+    assert "only a web page" in e.value.message and fake.added == []
+    var.link = "https://example.test/files/x.torrent?token=1"                # a direct .torrent URL is fine
+    db.commit()
+    service.approve(db, rel.id, var.id, tag.id)
+    assert fake.added[0][0] == "https://example.test/files/x.torrent?token=1"
+
+
+@respx.mock
+def test_add_reports_qbittorrents_own_reason_for_a_stale_link():
+    """Real case: a .torrent URL that now returns 404. qBittorrent answers 202, then logs the failure."""
+    url = "https://tracker.example/download/2189671.torrent"
+    respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(204))
+    respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
+    respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=httpx.Response(
+        202, json={"added_torrent_ids": [], "failure_count": 0, "pending_count": 1, "success_count": 0}))
+    respx.get(f"{QB}/api/v2/torrents/info").mock(return_value=httpx.Response(200, json=[]))
+    respx.get(f"{QB}/api/v2/log/main").mock(return_value=httpx.Response(200, json=[
+        {"id": 7, "type": 4, "message": 'Failed to add torrent. Source: "https://other.example/x.torrent". Reason: "boom"'},
+        {"id": 8, "type": 4, "message": f'Failed to add torrent. Source: "{url}". Reason: "The remote content was not found at the server (404)"'}]))
+    waits = []
+    with pytest.raises(RuntimeError, match=r"could not add it: The remote content was not found at the server \(404\)"):
+        QBittorrentClient(QB, "u", "p", confirm_seconds=15, sleep=waits.append).add(url, "anime", "/mnt/d/anime")
+    assert waits == []                                                      # failed fast, no 15 s wait
