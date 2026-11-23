@@ -193,6 +193,8 @@ def vpn_put(nid: int, body: VpnIn, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/nodes/{nid}/test")
 def node_test(nid: int, db: Session = Depends(get_db)) -> dict:
+    import httpx
+
     from ..download import service
     from ..download.qbittorrent import QBittorrentClient
     n = _node(db, nid)
@@ -201,15 +203,26 @@ def node_test(nid: int, db: Session = Depends(get_db)) -> dict:
     if agent is None:
         checks.append({"name": "Node agent", "ok": False, "message": "no agent URL configured"})
     else:
-        v = agent.vpn(settings.home_public_ip)
-        checks.append({"name": "Node agent + VPN", "ok": v.gate.allowed,
-                       "message": "reachable, VPN protected" if v.gate.allowed else v.gate.reason})
+        try:
+            agent.info()
+            checks.append({"name": "Node agent", "ok": True, "message": "reachable, token accepted"})
+        except AgentError as e:
+            checks.append({"name": "Node agent", "ok": False, "message": str(e)})
+        else:
+            if settings.require_vpn:
+                v = agent.vpn(settings.home_public_ip)
+                checks.append({"name": "VPN", "ok": v.gate.allowed,
+                               "message": "protected" if v.gate.allowed else v.gate.reason})
+            else:
+                checks.append({"name": "VPN", "ok": True, "message": "not required (downloads use your home IP)"})
     if not n.qbit_url:
         checks.append({"name": "qBittorrent", "ok": False, "message": "no WebUI URL configured"})
     else:
         try:
             QBittorrentClient(n.qbit_url, settings.qbit_username, settings.qbit_password)._login()
             checks.append({"name": "qBittorrent", "ok": True, "message": "logged in"})
-        except Exception as e:  # network error or bad credentials
-            checks.append({"name": "qBittorrent", "ok": False, "message": str(e)[:200]})
+        except httpx.HTTPError as e:
+            checks.append({"name": "qBittorrent", "ok": False, "message": f"cannot reach {n.qbit_url}: {e}"})
+        except Exception as e:  # bad credentials, ban, ...
+            checks.append({"name": "qBittorrent", "ok": False, "message": str(e)[:240]})
     return {"checks": checks}

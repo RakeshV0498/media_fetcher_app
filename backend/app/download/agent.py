@@ -50,6 +50,9 @@ class AgentClient:
 
     def info(self) -> dict:
         r = self._call("GET", "/info")
+        if r.status_code == 401:
+            raise AgentError("the agent rejected the token - 'Node agent token' in Settings must equal "
+                             "NODE_AGENT_TOKEN in that Pi's deploy/node.env")
         if r.status_code != 200:
             raise AgentError(f"node info failed ({r.status_code})")
         return r.json()

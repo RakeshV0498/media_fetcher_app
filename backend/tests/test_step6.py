@@ -66,7 +66,7 @@ def test_qbit_add_sets_no_seeding_and_returns_tag():
 @respx.mock
 def test_qbit_login_failure_and_rejected_add():
     respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(200, text="Fails."))
-    with pytest.raises(RuntimeError, match="login failed"):
+    with pytest.raises(RuntimeError, match="username or password"):
         QBittorrentClient(QB, "u", "bad").add("m", "c", "/p")
     respx.post(f"{QB}/api/v2/auth/login").mock(return_value=httpx.Response(200, text="Ok."))
     respx.post(f"{QB}/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))

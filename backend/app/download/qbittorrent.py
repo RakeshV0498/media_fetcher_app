@@ -30,8 +30,13 @@ class QBittorrentClient:
     def _login(self) -> None:
         r = self.http.post(f"{self.base}/api/v2/auth/login", data={"username": self.user, "password": self.pw},
                            headers={"Referer": self.base})
+        if r.status_code == 403 and "banned" in r.text.lower():
+            raise RuntimeError("qBittorrent has temporarily banned this IP after too many failed logins - "
+                               "restart the qbittorrent container (docker restart deploy-qbittorrent-1) and try again")
+        if r.status_code == 200 and r.text.strip() == "Fails.":
+            raise RuntimeError("qBittorrent rejected the username or password (the same login is used for every node)")
         if r.status_code != 200 or r.text.strip() != "Ok.":
-            raise RuntimeError("qBittorrent login failed (check QBIT_USERNAME / QBIT_PASSWORD)")
+            raise RuntimeError(f"qBittorrent login failed (HTTP {r.status_code}: {r.text.strip()[:80] or 'no body'})")
         self._logged_in = True
         self._configure()
 

@@ -220,11 +220,44 @@ def test_vpn_apply_failure_is_reported_but_saved(api_client, db):
 
 
 @respx.mock
-def test_node_test_reports_each_check(api_client, db):
+def test_node_test_without_vpn_does_not_fail_on_missing_vpn(api_client, db):
     n = db.scalar(select(Node).where(Node.name == "pi5"))
     n.agent_url, n.qbit_url = AGENT, "http://qb:8080"
     db.commit()
-    respx.get(f"{AGENT}/vpn").mock(return_value=httpx.Response(200, json={"vpn_status": "running", "vpn_ip": "5.5.5.5", "home_ip": "1.1.1.1"}))
+    settings.require_vpn = False
+    respx.get(f"{AGENT}/info").mock(return_value=httpx.Response(200, json={"download_roots": ["/d"], "media_roots": ["/m"]}))
+    vpn = respx.get(f"{AGENT}/vpn").mock(return_value=httpx.Response(200, json={"vpn_status": None, "vpn_ip": None, "home_ip": "1.1.1.1"}))
+    respx.post("http://qb:8080/api/v2/auth/login").mock(return_value=httpx.Response(200, text="Ok."))
+    respx.post("http://qb:8080/api/v2/app/setPreferences").mock(return_value=httpx.Response(200))
+    checks = {c["name"]: c for c in api_client.post(f"/api/nodes/{n.id}/test").json()["checks"]}
+    assert all(c["ok"] for c in checks.values()), checks
+    assert "not required" in checks["VPN"]["message"] and not vpn.called
+
+
+@respx.mock
+def test_node_test_requires_vpn_when_enabled_and_explains_failures(api_client, db):
+    n = db.scalar(select(Node).where(Node.name == "pi5"))
+    n.agent_url, n.qbit_url = AGENT, "http://qb:8080"
+    db.commit()
+    settings.require_vpn = True
+    respx.get(f"{AGENT}/info").mock(return_value=httpx.Response(200, json={}))
+    respx.get(f"{AGENT}/vpn").mock(return_value=httpx.Response(200, json={"vpn_status": None, "vpn_ip": None, "home_ip": "1.1.1.1"}))
     respx.post("http://qb:8080/api/v2/auth/login").mock(return_value=httpx.Response(200, text="Fails."))
     checks = {c["name"]: c for c in api_client.post(f"/api/nodes/{n.id}/test").json()["checks"]}
-    assert checks["Node agent + VPN"]["ok"] is True and checks["qBittorrent"]["ok"] is False
+    assert checks["VPN"]["ok"] is False and "not connected" in checks["VPN"]["message"]
+    assert checks["qBittorrent"]["ok"] is False and "username or password" in checks["qBittorrent"]["message"]
+
+
+@respx.mock
+def test_node_test_explains_token_ban_and_unreachable(api_client, db):
+    n = db.scalar(select(Node).where(Node.name == "pi5"))
+    n.agent_url, n.qbit_url = AGENT, "http://qb:8080"
+    db.commit()
+    respx.get(f"{AGENT}/info").mock(return_value=httpx.Response(401))
+    respx.post("http://qb:8080/api/v2/auth/login").mock(return_value=httpx.Response(403, text="Your IP address has been banned after too many failed authentication attempts."))
+    c = {x["name"]: x for x in api_client.post(f"/api/nodes/{n.id}/test").json()["checks"]}
+    assert "NODE_AGENT_TOKEN" in c["Node agent"]["message"] and "banned" in c["qBittorrent"]["message"]
+    respx.get(f"{AGENT}/info").mock(side_effect=httpx.ConnectError("refused"))
+    respx.post("http://qb:8080/api/v2/auth/login").mock(side_effect=httpx.ConnectError("refused"))
+    c = {x["name"]: x for x in api_client.post(f"/api/nodes/{n.id}/test").json()["checks"]}
+    assert "unreachable" in c["Node agent"]["message"] and "cannot reach http://qb:8080" in c["qBittorrent"]["message"]
