@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+import random
+import re
+import threading
+import time
+from collections.abc import Callable
+from datetime import datetime, timezone
+
+import httpx
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..config import settings
+from ..models import Release, Source, Tag, Variant
+from ..parsing.dedupe import release_key
+from ..parsing.parser import parse_size, parse_title
+from ..parsing.tagging import suggest_tag_name
+from .discovery import discover_feed
+from .feed import fetch_feed
+from .html import fetch_html
+from .types import RawItem
+
+_locks: dict[int, threading.Lock] = {}
+_HASH = re.compile(r"btih:([0-9a-zA-Z]{32,40})")
+
+
+def make_client(source: Source) -> httpx.Client:
+    ua = source.user_agent or settings.user_agent
+    return httpx.Client(headers={"User-Agent": ua}, timeout=20, follow_redirects=True)
+
+
+def _ident(item: RawItem) -> str:
+    if item.magnet and (m := _HASH.search(item.magnet)):
+        return m.group(1).lower()
+    return item.torrent_url or item.link or item.magnet or item.title
+
+
+def upsert_items(db: Session, source: Source, items: list[RawItem]) -> int:
+    """Insert new releases/variants; refresh seeders on known ones. Returns new variant count."""
+    tags = {t.name: t.id for t in db.scalars(select(Tag))}
+    new = 0
+    for item in items:
+        p = parse_title(item.title)
+        key = release_key(p)
+        rel = db.scalar(select(Release).where(Release.release_key == key))
+        if rel is None:
+            tag_id = source.default_tag_id or tags.get(suggest_tag_name(p, item.title))
+            rel = Release(release_key=key, title=p.title, year=p.year, season=p.season,
+                          episode=p.episode, absolute_episode=p.absolute_episode,
+                          kind=p.kind, suggested_tag_id=tag_id)
+            db.add(rel)
+            db.flush()
+        ident = _ident(item)
+        var = db.scalar(select(Variant).where(
+            Variant.release_id == rel.id, Variant.source_id == source.id, Variant.ident == ident))
+        if var is None:
+            db.add(Variant(
+                release_id=rel.id, source_id=source.id, ident=ident, title=item.title,
+                quality=p.quality, codec=p.codec, language=p.language,
+                size_bytes=parse_size(item.size_text), seeders=item.seeders,
+                leechers=item.leechers, magnet=item.magnet, torrent_url=item.torrent_url,
+                link=item.link))
+            new += 1
+        else:
+            if item.seeders is not None:
+                var.seeders = item.seeders
+            if item.leechers is not None:
+                var.leechers = item.leechers
+            var.seen_at = datetime.now(timezone.utc)
+    db.commit()
+    return new
+
+
+def scan_source(db: Session, source: Source, client: httpx.Client | None = None,
+                sleep: Callable[[float], None] = time.sleep) -> str:
+    lock = _locks.setdefault(source.id, threading.Lock())
+    if not lock.acquire(blocking=False):
+        return "scan already running"
+    own = client is None
+    client = client or make_client(source)
+    try:
+        sleep(random.uniform(settings.scan_min_delay, settings.scan_max_delay))
+        items: list[RawItem] = []
+        feed_url = source.feed_url
+        if source.mode in ("auto", "feed") and not feed_url:
+            feed_url = discover_feed(client, source.url)
+            if feed_url:
+                source.feed_url = feed_url
+            elif source.mode == "feed":
+                raise ValueError("no feed found")
+        if source.mode != "html" and feed_url:
+            items = fetch_feed(client, feed_url)
+        else:
+            items = fetch_html(client, source.url, source.selectors or {})
+        new = upsert_items(db, source, items)
+        status = f"ok: {len(items)} items, {new} new"
+    except Exception as exc:  # recorded for the UI; never crash the scheduler
+        status = f"error: {exc}"
+    finally:
+        lock.release()
+        if own:
+            client.close()
+    source.last_scan_at = datetime.now(timezone.utc)
+    source.last_status = status
+    db.commit()
+    return status

@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     downloads_enabled: bool = False  # safe default: downloads OFF
     home_public_ip: str = ""
     user_agent: str = "MediaFetcher/0.1"
+    scan_min_delay: float = 1.0
+    scan_max_delay: float = 4.0
 
 
 settings = Settings()
