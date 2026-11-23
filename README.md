@@ -81,3 +81,10 @@ General · Integrations (TMDB, Jellyfin) · Telegram · Downloads · Libraries (
   `node.env` to start at all; afterwards you can change it from the UI. This path needs a recent gluetun and has
   **not been tested against a real gluetun yet** - use *Save & apply* on one node and confirm the Nodes tab shows
   "VPN protected" before relying on it.
+
+## Example source
+On first start the app adds one openly licensed source, **WebTorrent free torrents** (Big Buck Bunny, Sintel,
+Tears of Steel, Cosmos Laundromat: public domain / Creative Commons Blender films), so you can try the whole
+flow (scan -> review -> approve -> download -> file) with content that is legal to download. Delete it any time;
+it is not re-added. When a site has no feed and no selectors, the Sources page says so and offers **Add selectors**;
+selectors also accept an optional `title_regex` to trim extra text from titles.

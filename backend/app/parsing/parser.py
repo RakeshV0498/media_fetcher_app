@@ -21,6 +21,7 @@ class ParsedTitle:
     quality: str | None = None
     codec: str | None = None
     language: str | None = None
+    raw: str = ""
 
 
 def parse_size(text: str | None) -> int | None:
@@ -58,4 +59,5 @@ def parse_title(raw: str) -> ParsedTitle:
         quality=g.get("screen_size"),
         codec=g.get("video_codec"),
         language=str(lang) if lang else None,
+        raw=raw,
     )

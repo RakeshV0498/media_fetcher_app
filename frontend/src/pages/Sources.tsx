@@ -31,6 +31,12 @@ export function Sources({ notify }: { notify: ToastFn }) {
       notify(r.feed_url ? `Feed found: ${r.feed_url}` : "No feed found — use HTML selectors", !r.feed_url);
     } catch (e) { notify((e as Error).message, true); }
   };
+  const startEdit = (s: Source, mode?: string) => {
+    setEditing(s.id); setOpen(true);
+    setForm({ name: s.name, url: s.url, mode: mode ?? s.mode, interval_minutes: s.interval_minutes, cron: s.cron ?? "", user_agent: s.user_agent,
+      selectors: Object.keys(s.selectors).length ? JSON.stringify(s.selectors, null, 2) : "{}" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const scan = async (id: number) => {
     setScanning(id);
     try { const r = await api<{ status: string }>(`/api/sources/${id}/scan`, "POST"); notify(r.status, r.status.startsWith("error")); load(); }
@@ -54,6 +60,7 @@ export function Sources({ notify }: { notify: ToastFn }) {
             <label className="field">Cron <span className="hint">overrides interval</span><input className="mono" placeholder="*/30 * * * *" value={form.cron} onChange={(e) => set({ cron: e.target.value })} /></label>
             <label className="field">User-Agent <span className="hint">blank = default</span><input value={form.user_agent} onChange={(e) => set({ user_agent: e.target.value })} /></label>
             <label className="field wide">HTML selectors (JSON) <button type="button" className="link inline" onClick={() => set({ selectors: SEL_EXAMPLE })}>Insert example</button>
+              <span className="hint">Needs <span className="mono">item</span> and <span className="mono">title</span>. Optional: link, torrent, magnet, size, seeders, leechers, date, <span className="mono">title_regex</span> (keeps the first group of the match as the title).</span>
               <textarea className="mono" rows={7} value={form.selectors} onChange={(e) => set({ selectors: e.target.value })} spellCheck={false} /></label>
           </div>
           <div className="form-actions">
@@ -70,16 +77,21 @@ export function Sources({ notify }: { notify: ToastFn }) {
         <div className="stack">
           {list.map((s) => {
             const bad = s.last_status.startsWith("error");
+            const needsSelectors = bad && /no feed was found/i.test(s.last_status);
             return (
               <article key={s.id} className="card source">
                 <div className="source-main">
                   <div className="title-row"><span className={`dot ${!s.last_status ? "muted" : bad ? "bad" : "good"}`} /><h3>{s.name}</h3><span className="chip ghost">{MODES[s.mode] ?? s.mode}</span></div>
                   <p className="url mono">{s.url}</p>
-                  <p className="sub">{s.feed_url ? <>Feed: <span className="mono">{s.feed_url}</span> · </> : ""}{s.cron ? <span className="mono">{s.cron}</span> : `every ${s.interval_minutes} min`} · <span className={bad ? "text-bad" : ""}>{s.last_status || "never scanned"}</span></p>
+                  {needsSelectors && (
+                    <div className="note warn-note"><Icon name="alert" size={16} /><span>No feed was found for this site, so it can only be read from its HTML. Add the CSS selectors that point at each entry and its title.</span>
+                      <button className="btn sm" onClick={() => startEdit(s, "html")}><Icon name="pencil" size={14} />Add selectors</button></div>
+                  )}
+                  <p className="sub">{s.feed_url ? <>Feed: <span className="mono">{s.feed_url}</span> · </> : ""}{s.cron ? <span className="mono">{s.cron}</span> : `every ${s.interval_minutes} min`} · <span className={bad && !needsSelectors ? "text-bad" : ""}>{needsSelectors ? "needs selectors" : s.last_status || "never scanned"}</span></p>
                 </div>
                 <div className="source-actions">
                   <button className="btn" onClick={() => scan(s.id)} disabled={scanning === s.id}><Icon name="refresh" size={16} />{scanning === s.id ? "Scanning…" : "Scan now"}</button>
-                  <button className="btn ghost" onClick={() => { setEditing(s.id); setOpen(true); setForm({ name: s.name, url: s.url, mode: s.mode, interval_minutes: s.interval_minutes, cron: s.cron ?? "", user_agent: s.user_agent, selectors: JSON.stringify(s.selectors, null, 2) }); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Icon name="pencil" size={16} />Edit</button>
+                  <button className="btn ghost" onClick={() => startEdit(s)}><Icon name="pencil" size={16} />Edit</button>
                   <button className="btn ghost danger" onClick={async () => { if (confirm(`Delete ${s.name}?`)) { await api(`/api/sources/${s.id}`, "DELETE"); load(); } }}><Icon name="trash" size={16} /></button>
                 </div>
               </article>

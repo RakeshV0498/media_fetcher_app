@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urljoin
 
 import httpx
@@ -6,7 +7,12 @@ from bs4 import BeautifulSoup, Tag
 from .types import RawItem
 
 # selectors: {"item": css, "title": "css[@attr]", "link", "date", "magnet",
-#             "torrent", "size", "seeders", "leechers"}  -- all but item/title optional.
+#             "torrent", "size", "seeders", "leechers", "title_regex"}  -- all but item/title optional.
+# title_regex: optional; if it matches, group 1 (or the whole match) replaces the extracted title text.
+
+
+NO_SELECTORS_MSG = ("No feed was found for this site and no HTML selectors are set. "
+                    "Open Edit and add the 'item' and 'title' selectors (see 'Insert example').")
 
 
 def _pick(node: Tag, spec: str | None) -> str | None:
@@ -31,13 +37,20 @@ def _int(v: str | None) -> int | None:
 
 def fetch_html(client: httpx.Client, url: str, sel: dict[str, str]) -> list[RawItem]:
     if not sel.get("item") or not sel.get("title"):
-        raise ValueError("html mode needs 'item' and 'title' selectors")
+        raise ValueError(NO_SELECTORS_MSG)
     r = client.get(url)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "lxml")
+    try:
+        title_re = re.compile(sel["title_regex"]) if sel.get("title_regex") else None
+        nodes = soup.select(sel["item"])
+    except (re.error, ValueError, SyntaxError) as e:
+        raise ValueError(f"invalid selector or title_regex: {e}") from e
     items: list[RawItem] = []
-    for node in soup.select(sel["item"]):
+    for node in nodes:
         title = _pick(node, sel["title"])
+        if title and title_re and (m := title_re.search(title)):
+            title = (m.group(1) if m.groups() else m.group(0)).strip()
         if not title:
             continue
 

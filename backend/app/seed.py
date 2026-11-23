@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .models import Node, Setting, Tag
+from .models import Node, Setting, Source, Tag
 
 NODES = ["pi5", "pi4"]
 # (name, kind, node, category, final_path)
@@ -38,3 +38,37 @@ def seed(db: Session) -> None:
     if db.get(Setting, "preferred_quality") is None:
         db.add(Setting(key="preferred_quality", value="1080p"))
     db.commit()
+
+
+# Sources that publish openly licensed (public domain / Creative Commons) torrents, for trying the full flow.
+EXAMPLE_SOURCES = [
+    {
+        "name": "WebTorrent free torrents (CC / public domain test files)",
+        "url": "https://webtorrent.io/free-torrents",
+        "mode": "html",
+        "interval_minutes": 1440,
+        "selectors": {
+            "item": "li:not(:has(a[href*='wired-cd']))",  # skip the audio-only entry
+            "title": "p",
+            "title_regex": r"^(.*?)\s*\(torrent file\)",
+            "torrent": "a[href$='.torrent']@href",
+            "magnet": "a[href^='magnet:']@href",
+        },
+    },
+]
+
+
+def seed_example_sources(db: Session) -> list[Source]:
+    """Add the example sources once (re-deleting one is respected). Returns newly added sources."""
+    if db.get(Setting, "example_sources_seeded") is not None:
+        return []
+    added = []
+    existing = {s.url for s in db.scalars(select(Source))}
+    for spec in EXAMPLE_SOURCES:
+        if spec["url"] not in existing:
+            src = Source(**spec)
+            db.add(src)
+            added.append(src)
+    db.add(Setting(key="example_sources_seeded", value="1"))
+    db.commit()
+    return added

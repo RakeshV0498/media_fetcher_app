@@ -16,7 +16,7 @@ from .db import SessionLocal
 from .notify import telegram
 from .scanner import scheduler
 from . import settings_store
-from .seed import seed
+from .seed import seed, seed_example_sources
 
 
 def migrate() -> None:
@@ -46,8 +46,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     migrate()
     with SessionLocal() as db:
         seed(db)
+        new_sources = seed_example_sources(db)
+        new_source_ids = [s.id for s in new_sources]
         settings_store.apply_overrides(db)
     scheduler.start()
+    for sid in new_source_ids:  # first scan right away so the example shows up in Review
+        scheduler.scheduler.add_job(scheduler.scan_now, args=[sid], id=f"first-scan-{sid}", replace_existing=True)
     scheduler.scheduler.add_job(releases.unsnooze_due, "interval", minutes=5,
                                 id="unsnooze", replace_existing=True)
     scheduler.scheduler.add_job(_process_completed, "interval", seconds=30,

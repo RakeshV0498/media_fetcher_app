@@ -17,4 +17,9 @@ def release_key(p: ParsedTitle) -> str:
         return f"tv:{name}:s{p.season:02d}e{p.episode:03d}"
     if p.absolute_episode is not None:
         return f"tv:{name}:abs{p.absolute_episode}"
-    return f"tv:{name}:e{p.episode if p.episode is not None else ''}:{p.year or ''}"
+    if p.episode is not None:
+        return f"tv:{name}:e{p.episode}:{p.year or ''}"
+    # No season/episode/year to tell items apart: keying on the title alone would merge unrelated
+    # files (e.g. every release of one project), so fall back to the whole normalized raw title.
+    return f"tv:{name}:raw:{normalize_title(p.raw)}"
+

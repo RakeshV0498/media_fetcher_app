@@ -88,7 +88,7 @@ def scan_source(db: Session, source: Source, client: httpx.Client | None = None,
             if feed_url:
                 source.feed_url = feed_url
             elif source.mode == "feed":
-                raise ValueError("no feed found")
+                raise ValueError("No feed was found for this site. Switch the source to HTML mode and add selectors, or check the URL.")
         if source.mode != "html" and feed_url:
             items = fetch_feed(client, feed_url)
         else:

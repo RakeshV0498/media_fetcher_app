@@ -257,3 +257,6 @@ textarea { resize: vertical; line-height: 1.5; }
 .dirlist { list-style: none; margin: 0; padding: 4px; border: 1px solid var(--border); border-radius: 12px; max-height: 280px; overflow: auto; background: var(--surface-2); }
 .dirlist button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: none; text-align: left; cursor: pointer; font-weight: 550; }
 .dirlist button:hover { background: var(--surface-3); } .dirlist .icon { color: var(--accent); } .pad-s { padding: 10px; }
+
+.warn-note { align-items: center; flex-wrap: wrap; padding: 10px 12px; margin: 4px 0; background: var(--warn-soft); color: var(--warn); border-radius: 10px; font-weight: 500; }
+.warn-note span { flex: 1 1 280px; }
