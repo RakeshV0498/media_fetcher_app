@@ -13,3 +13,4 @@ data/
 *.sqlite3
 node.env
 deploy/node.env
+deploy/docker-compose.local.yml

@@ -34,6 +34,8 @@ Downloads page and it is filed; existing files are never overwritten (*duplicate
 *Settings → Downloads → Require VPN to download* **off** (the default); your home IP is then visible to peers. Later you can
 switch to the gluetun stack below and turn *Require VPN* on to refuse any download unless the VPN check passes.
 
+Put per-Pi disk mounts in a git-ignored `deploy/docker-compose.local.yml` (added with a second `-f`) so `git pull` never conflicts.
+
 Quick path without VPN, on each Pi: `cp deploy/node.env.example deploy/node.env`, set `NODE_AGENT_TOKEN`, `DOWNLOADS_DIR` and
 `MEDIA_ROOTS` (Pi 5: `/Media_Server/05`; Pi 4: `/cloud/01,/cloud/02`), add the matching volume lines, then
 `docker compose -f deploy/docker-compose.node.novpn.yml --env-file deploy/node.env up -d --build`. Set the qBittorrent
