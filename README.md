@@ -57,3 +57,9 @@ Safety behaviour: approvals are refused unless the flag is on, the node's tunnel
 differs from the home IP (measured by the agent outside the VPN, or `HOME_PUBLIC_IP`), and the target disk has room
 (size x1.1 + `MIN_FREE_RESERVE_GB`). Any error in these checks blocks the download. The agent only reads/writes
 under `DOWNLOAD_ROOTS` / `MEDIA_ROOTS`.
+
+## Login password
+Run `docker compose -f deploy/docker-compose.yml run --rm controller python -m app.hashpw` and paste the printed
+line (`AUTH_PASSWORD_HASH='$argon2id$...'`) into `.env`. **Keep the single quotes** - Docker Compose otherwise
+interpolates the `$` characters and mangles the hash. After any `.env` change run
+`docker compose -f deploy/docker-compose.yml up -d --force-recreate`.
