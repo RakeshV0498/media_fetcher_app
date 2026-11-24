@@ -152,5 +152,5 @@ try to get past CAPTCHAs, Cloudflare checks or logins - such pages are reported 
 **First start on a Pi (checklist, the arm64 image cannot be built where this was developed):**
 `docker compose -f deploy/docker-compose.yml --profile browser up -d --build browser` -> `docker logs deploy-browser-1` shows
 uvicorn running -> Settings -> *Test browser* says "Browser works (Chromium ...)" -> analyze a JavaScript page ->
-watch `docker stats deploy-browser-1` stays under the cap. If Debian's Chromium misbehaves, edit `deploy/Dockerfile.browser`: replace
+watch `docker stats deploy-browser-1` stays under the cap. If the build is "Killed" (exit 137) the Pi ran out of memory: build only that service and retry. If Debian's Chromium misbehaves, edit `deploy/Dockerfile.browser`: replace
 the apt line with `RUN playwright install --with-deps chromium` and remove `CHROMIUM_PATH`.

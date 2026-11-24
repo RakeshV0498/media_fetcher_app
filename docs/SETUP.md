@@ -162,4 +162,6 @@ Re-run the node `up -d --build` command only if node files changed. The database
 | Approve refused: disk space | The target disk is too full. Free some space, or lower *Keep free disk space* in Settings, Downloads. |
 | Approve refused: no node agent | The node's agent URL is not set or the agent is not running. |
 | Login fails after editing `.env` | Keep the single quotes around `AUTH_PASSWORD_HASH`, then `--force-recreate`. |
+| Browser image build "Killed" / exit code 137 | The Pi ran out of memory while building. Build it alone (`docker compose -f deploy/docker-compose.yml --profile browser up -d --build browser`), and if it still dies, stop other heavy containers for the build or add swap, then retry. |
+| Browser test says 502 | The image is missing `libatomic1` (fixed in the repo); `git pull` and rebuild: `... --profile browser up -d --build browser`. |
 | Source scan error "No feed was found" | Press **Add selectors** on the source, then **Analyze page**. |

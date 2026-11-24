@@ -2,8 +2,9 @@
 # Uses Debian's chromium (available for arm64, smaller than Playwright's bundled browser); if that ever misbehaves on
 # your Pi, replace the apt line with `playwright install --with-deps chromium` and unset CHROMIUM_PATH.
 FROM python:3.12-slim-bookworm
+# libatomic1: Playwright's bundled Node driver needs libatomic.so.1, which the slim image lacks (without it /render answers 502).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends chromium fonts-liberation \
+ && apt-get install -y --no-install-recommends chromium fonts-liberation libatomic1 \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 browser
 WORKDIR /srv
