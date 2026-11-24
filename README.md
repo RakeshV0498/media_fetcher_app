@@ -1,8 +1,10 @@
 # Media Fetcher
 
+> **New here? Start with the [full setup guide and how it works](docs/SETUP.md).** The sections below are the per-feature reference.
+
 Self-hosted release monitor with approval-based downloads for Jellyfin.
-Controller (Pi 5) + a thin node agent on each Pi. Downloads are **disabled by default**
-(`DOWNLOADS_ENABLED=false`) until the VPN layer is configured and verified.
+Controller (Pi 5) + a thin node agent on each Pi. Downloads are **disabled by default** (turn on
+*Settings -> Downloads -> Downloads enabled*); a VPN is **optional** (*Require VPN to download*, off by default).
 
 Layout: `backend/` (FastAPI), `frontend/` (React), `node_agent/`, `deploy/`.
 

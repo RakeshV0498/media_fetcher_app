@@ -253,7 +253,7 @@ export function SettingsPage({ notify }: { notify: ToastFn }) {
               <div className="segmented">{["2160p", "1080p", "720p", "480p"].map((q) => <button key={q} className={quality === q ? "on" : ""} onClick={() => setQ(q)}>{q}</button>)}</div></section>
             <FieldsForm group="general" fields={fields} reload={reload} notify={notify} />
           </div>}
-          {tab === "integrations" && <FieldsForm group="integrations" fields={fields} reload={reload} notify={notify} tests={[{ name: "tmdb", label: "Test TMDB" }, { name: "jellyfin", label: "Test Jellyfin" }]} intro="Metadata and your media server." />}
+          {tab === "integrations" && <FieldsForm group="integrations" fields={fields} reload={reload} notify={notify} tests={[{ name: "tmdb", label: "Test TMDB" }, { name: "jellyfin", label: "Test Jellyfin" }, { name: "browser", label: "Test browser" }]} intro="Metadata and your media server." />}
           {tab === "telegram" && <FieldsForm group="telegram" fields={fields} reload={reload} notify={notify} tests={[{ name: "telegram", label: "Send test message" }]} intro="New releases arrive with Approve / Reject buttons. Press Start in your bot's chat first." />}
           {tab === "downloads" && <FieldsForm group="downloads" fields={fields.filter((f) => !["qbit_username", "qbit_password", "node_agent_token"].includes(f.key))} reload={reload} notify={notify} intro="Real downloads need the master switch on. A VPN is optional: switch on “Require VPN to download” to also demand a passing VPN check." />}
           {tab === "libraries" && <Libraries notify={notify} />}
