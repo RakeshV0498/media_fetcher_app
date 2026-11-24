@@ -288,8 +288,8 @@ def analyze_listing(html: str, base_url: str = "") -> tuple[list[Candidate], lis
     cands.sort(key=lambda c: -c.score)
     if not cands:
         warnings.append("No repeating list of entries was found. If the page's source (Ctrl+U) doesn't contain the entries, "
-                        "the site builds the list with JavaScript, which this scraper can't read; if it needs a login, "
-                        "save the page and use 'Paste page HTML'.")
+                        "the site builds the list with JavaScript: tick 'Render with a browser' (optional browser service). "
+                        "If the site needs a login or blocks automated access, save the page and use 'Paste page HTML'.")
     return cands[:MAX_CANDIDATES], warnings
 
 
@@ -416,3 +416,16 @@ def _flat_candidate(soup: BeautifulSoup, html: str, base_url: str) -> Candidate 
 
 def _field_selectors_detail(block: Tag) -> tuple[dict[str, str], list[str]]:
     return _detail_fields(block), []
+
+
+def looks_script_driven(html: str) -> bool:
+    """A page whose content is probably built by JavaScript: scripts present but almost no visible text, or an empty
+    app-mount element (React/Vue/Next style)."""
+    soup = BeautifulSoup(html, "lxml")
+    scripts = len(soup.find_all("script"))
+    for s_ in soup(["script", "style", "noscript"]):
+        s_.decompose()
+    text_len = len(soup.get_text(" ", strip=True))
+    mount = soup.find(id=re.compile(r"^(root|app|__next|__nuxt|svelte)$", re.I))
+    empty_mount = mount is not None and not mount.get_text(strip=True)
+    return scripts > 0 and (text_len < 600 or empty_mount)

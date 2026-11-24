@@ -19,7 +19,7 @@ class SettingsIO(BaseModel):
 def get_settings(db: Session = Depends(get_db)) -> dict:
     return {"preferred_quality": service.preferred_quality(db),
             "downloads_enabled": settings.downloads_enabled,
-            "download_client": settings.download_client}
+            "download_client": settings.download_client, "browser_enabled": settings.browser_enabled}
 
 
 @router.put("/settings")

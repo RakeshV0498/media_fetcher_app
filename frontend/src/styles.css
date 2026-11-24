@@ -278,3 +278,6 @@ textarea { resize: vertical; line-height: 1.5; }
 .preview th, .preview td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
 .preview th { color: var(--faint); font-weight: 650; text-transform: uppercase; font-size: .7rem; letter-spacing: .05em; background: var(--surface-2); }
 .selpre { margin: 0; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; overflow: auto; max-height: 200px; font-size: .78rem; }
+
+.fetch-opts { display: flex; flex-direction: column; gap: 8px; }
+.check-row { display: flex; align-items: center; gap: 10px; font-size: .9rem; }

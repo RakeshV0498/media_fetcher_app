@@ -5,7 +5,7 @@ import { Icon } from "../ui";
 
 interface Row { title: string; link: string | null; magnet: boolean; torrent: boolean; size: string | null; seeders: number | null; leechers: number | null }
 interface Candidate { selectors: Record<string, unknown>; score: number; count: number; notes: string[]; preview: Row[]; stats: Record<string, number>; two_level: boolean }
-interface Result { candidates: Candidate[]; warnings: string[]; kind: string }
+interface Result { candidates: Candidate[]; warnings: string[]; kind: string; rendered?: boolean; suggest_browser?: boolean }
 
 function CandidateList({ result, picked, setPicked, onUse, useLabel }: {
   result: Result; picked: number; setPicked: (i: number) => void; onUse: (c: Candidate) => void; useLabel: string;
@@ -45,9 +45,10 @@ function CandidateList({ result, picked, setPicked, onUse, useLabel }: {
 }
 
 /** Looks at a page and proposes the selectors, with a preview of what a scan would read. */
-export function SelectorAssistant({ url, userAgent, current, onApply, notify }: {
+export function SelectorAssistant({ url, userAgent, current, onApply, notify, browserEnabled, render, waitSelector, setFetch }: {
   url: string; userAgent: string; current: Record<string, unknown>;
   onApply: (selectors: Record<string, unknown>) => void; notify: ToastFn;
+  browserEnabled: boolean; render: string; waitSelector: string; setFetch: (render: string, wait: string) => void;
 }) {
   const [paste, setPaste] = useState(false);
   const [html, setHtml] = useState("");
@@ -61,15 +62,18 @@ export function SelectorAssistant({ url, userAgent, current, onApply, notify }: 
   const [dres, setDres] = useState<Result | null>(null);
   const [dpicked, setDpicked] = useState(0);
 
-  const run = async (kind: "listing" | "detail") => {
+  const run = async (kind: "listing" | "detail", forceBrowser = false) => {
     setBusy(true);
     try {
       const isDetail = kind === "detail";
+      const useBrowser = forceBrowser || render === "browser";
+      const fetchOpts = { render: useBrowser ? "browser" : "static", wait_selector: useBrowser && !isDetail && waitSelector ? waitSelector : null };
       const body = isDetail
-        ? { kind, url: detailPaste ? null : detailUrl, html: detailPaste ? detailHtml : null, site_url: url, user_agent: userAgent }
-        : { kind, url: paste ? null : url, html: paste ? html : null, user_agent: userAgent };
+        ? { kind, url: detailPaste ? null : detailUrl, html: detailPaste ? detailHtml : null, site_url: url, user_agent: userAgent, ...fetchOpts }
+        : { kind, url: paste ? null : url, html: paste ? html : null, user_agent: userAgent, ...fetchOpts };
       const r = await api<Result>("/api/sources/analyze", "POST", body);
       if (isDetail) { setDres(r); setDpicked(0); } else { setRes(r); setPicked(0); setUsed(null); setDres(null); }
+      if (forceBrowser && render !== "browser") setFetch("browser", waitSelector);
     } catch (e) { notify((e as Error).message, true); } finally { setBusy(false); }
   };
 
@@ -90,10 +94,26 @@ export function SelectorAssistant({ url, userAgent, current, onApply, notify }: 
         <button type="button" className="link" onClick={() => setPaste(!paste)}>{paste ? "Fetch from the URL instead" : "Paste page HTML instead"}</button>
       </div>
       <p className="muted small">Reads the page and works out the selectors for you, with a preview of what a scan would extract. Use “paste” for sites that block scrapers, need a login or build the list with JavaScript (copy the page source, Ctrl+U).</p>
+      {!paste && (
+        <div className="fetch-opts">
+          <label className="check-row">
+            <input type="checkbox" className="check" checked={render === "browser"} disabled={!browserEnabled && render !== "browser"}
+              onChange={(e) => setFetch(e.target.checked ? "browser" : "static", waitSelector)} />
+            <span>Render with a browser <span className="muted small">(for sites that build their list with JavaScript)</span></span>
+          </label>
+          {!browserEnabled && <p className="muted small">Not available yet: turn on “Render JavaScript pages with a browser” in Settings → Integrations and start the browser service (see the README).</p>}
+          {render === "browser" && <input className="mono" placeholder="Optional: wait for this element, e.g. li.row" value={waitSelector} onChange={(e) => setFetch("browser", e.target.value)} />}
+        </div>
+      )}
       {paste && <textarea className="mono" rows={5} placeholder="Paste the page's HTML here" value={html} onChange={(e) => setHtml(e.target.value)} />}
       <button type="button" className="btn" disabled={busy || (paste ? !html.trim() : !url)} onClick={() => run("listing")}>
         <Icon name="search" size={16} />{busy && !dres ? "Analyzing…" : "Analyze page"}
       </button>
+      {res && res.suggest_browser && render !== "browser" && (
+        <div className="note warn-note"><Icon name="alert" size={16} /><span>This page looks like it is built with JavaScript, which a plain fetch can't see.</span>
+          <button type="button" className="btn sm" disabled={busy || !browserEnabled} title={browserEnabled ? "" : "Enable the browser in Settings → Integrations first"}
+            onClick={() => run("listing", true)}><Icon name="search" size={14} />Try with the browser</button></div>
+      )}
       {res && <CandidateList result={res} picked={picked} setPicked={setPicked} onUse={useListing} useLabel="Use these selectors" />}
 
       {used?.two_level && (

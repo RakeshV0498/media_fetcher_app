@@ -45,6 +45,7 @@ export interface Source {
   id: number; name: string; url: string; feed_url: string | null; mode: string;
   selectors: Record<string, string>; user_agent: string; interval_minutes: number;
   cron: string | null; enabled: boolean; default_tag_id: number | null; last_status: string;
+  render: "static" | "browser"; wait_selector: string | null;
 }
 export interface Download {
   id: number; title: string; season: number | null; episode: number | null; quality: string | null;

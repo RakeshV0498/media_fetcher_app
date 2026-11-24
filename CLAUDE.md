@@ -18,6 +18,10 @@ Controller (FastAPI + SQLite + React) runs on the Pi 5; each Pi (5 and 4) runs a
 - Secrets editable in the Settings page are stored encrypted in the DB (key from APP_SECRET); `.env` only needs
   APP_SECRET, DATABASE_URL and the first AUTH_PASSWORD_HASH (single-quoted: Compose interpolates `$`).
 
+- Optional browser rendering (Playwright + Chromium in a separate `browser` compose-profile container) exists for
+  JavaScript-built pages. It stays OFF by default and must stay memory-capped. NEVER add stealth/fingerprint spoofing or
+  CAPTCHA/Cloudflare/login bypassing: bot-check pages are reported as blocked and the user pastes the HTML instead.
+
 ## Commands
 - Backend tests: `cd backend && python -m pytest -q`  (Python >= 3.12; node agent tests import `node_agent/`)
 - Frontend: `cd frontend && npm run build`

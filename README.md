@@ -131,3 +131,24 @@ class names, size patterns), then **previews what a scan would extract** so you 
   with Ctrl+U in your browser).
 - It cannot separate versions that are not wrapped in similar blocks, and it cannot read JavaScript-only pages. The proposal
   is always shown as JSON you can edit before saving.
+
+## Optional: browser rendering for JavaScript sites
+Some sites build their list with JavaScript, so a plain fetch (and the assistant) sees an empty page. An optional **browser
+service** (Playwright + Chromium, in its own container) renders such pages. It is **off by default**.
+
+1. In the controller `.env` set `BROWSER_TOKEN=<any long random string>` (shared by the controller and the service).
+2. Start it: `docker compose -f deploy/docker-compose.yml --profile browser up -d --build` (first build downloads ~400 MB).
+3. Settings -> Integrations: turn on **Render JavaScript pages with a browser** and press **Test browser**.
+4. In **Sources**, either tick *Render with a browser* in the assistant (it offers **Try with the browser** automatically when a
+   plain fetch finds nothing on a script-driven page), or set a source's **Fetch pages with = Browser**. Scans and *Load versions*
+   for that source then use the browser. Optional *Wait for element* = a selector that appears once the list has loaded.
+
+Limits and safety: one page at a time and a 768 MB memory cap (a Pi 5 with 4 GB is fine); images/fonts are not loaded; the service
+refuses addresses on your own network (loopback/private/link-local) and `file:` URLs; it uses an honest browser and does **not**
+try to get past CAPTCHAs, Cloudflare checks or logins - such pages are reported as blocked, use **Paste page HTML** for them.
+
+**First start on a Pi (checklist, the arm64 image cannot be built where this was developed):**
+`docker compose -f deploy/docker-compose.yml --profile browser up -d --build browser` -> `docker logs deploy-browser-1` shows
+uvicorn running -> Settings -> *Test browser* says "Browser works (Chromium ...)" -> analyze a JavaScript page ->
+watch `docker stats deploy-browser-1` stays under the cap. If Debian's Chromium misbehaves, edit `deploy/Dockerfile.browser`: replace
+the apt line with `RUN playwright install --with-deps chromium` and remove `CHROMIUM_PATH`.

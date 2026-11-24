@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import Source
+from ..scanner import browser_client
 from ..scanner.discovery import discover_feed
 from ..scanner.runner import make_client
 from ..scanner.scheduler import schedule_source, scan_now
@@ -101,6 +102,8 @@ class AnalyzeIn(BaseModel):
     html: str | None = None  # pasted page source (for sites that block scrapers, need a login or JavaScript)
     site_url: str | None = None  # the source's listing URL; a detail URL must be on the same host
     user_agent: str = ""
+    render: Literal["static", "browser"] = "static"  # browser = render JavaScript first (optional browser service)
+    wait_selector: str | None = None
 
 
 MAX_PAGE_BYTES = 4_000_000
@@ -114,33 +117,47 @@ def analyze_page(body: AnalyzeIn) -> dict:
     import httpx
 
     from ..config import settings
-    from ..scanner.analyze import analyze_detail, analyze_listing
+    from ..scanner.analyze import analyze_detail, analyze_listing, looks_script_driven
     if body.kind not in ("listing", "detail"):
         raise HTTPException(422, "kind must be 'listing' or 'detail'")
     html, base = body.html, body.url or body.site_url or ""
+    rendered = False
     if not html:
         if not body.url or not body.url.startswith(("http://", "https://")):
             raise HTTPException(422, "give a page URL (http/https) or paste the page HTML")
         if body.kind == "detail" and body.site_url and (urlparse(body.url).hostname or "") != (urlparse(body.site_url).hostname or ""):
             raise HTTPException(400, "the detail page must be on the same site as the source")
-        try:
-            with httpx.Client(headers={"User-Agent": body.user_agent or settings.user_agent}, timeout=20,
-                              follow_redirects=True) as c:
-                r = c.get(body.url)
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            hint = (" The site is probably blocking automated access: open it in your browser, save/copy the page source "
-                    "and use 'Paste page HTML'." if e.response.status_code in (401, 403, 429, 503) else "")
-            raise HTTPException(502, f"the site answered HTTP {e.response.status_code}.{hint}") from e
-        except httpx.HTTPError as e:
-            raise HTTPException(502, f"could not fetch the page: {e}") from e
-        if len(r.content) > MAX_PAGE_BYTES:
-            raise HTTPException(413, "that page is too large to analyze")
-        html = r.text
+        if body.render == "browser":
+            try:
+                page = browser_client.render(body.url, wait_selector=body.wait_selector, user_agent=body.user_agent)
+            except browser_client.BrowserUnavailable as e:
+                raise HTTPException(503, str(e)) from e
+            except browser_client.BrowserTimeout as e:
+                raise HTTPException(504, f"the browser timed out: {e}") from e
+            except browser_client.BrowserError as e:  # includes BrowserBlocked (bot-check pages are reported, not bypassed)
+                raise HTTPException(502, str(e)) from e
+            html, base, rendered = page.html, page.final_url, True
+        else:
+            try:
+                with httpx.Client(headers={"User-Agent": body.user_agent or settings.user_agent}, timeout=20,
+                                  follow_redirects=True) as c:
+                    r = c.get(body.url)
+                r.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                hint = (" The site is probably blocking automated access: open it in your browser, save/copy the page source "
+                        "and use 'Paste page HTML'." if e.response.status_code in (401, 403, 429, 503) else "")
+                raise HTTPException(502, f"the site answered HTTP {e.response.status_code}.{hint}") from e
+            except httpx.HTTPError as e:
+                raise HTTPException(502, f"could not fetch the page: {e}") from e
+            if len(r.content) > MAX_PAGE_BYTES:
+                raise HTTPException(413, "that page is too large to analyze")
+            html = r.text
     if len(html) > MAX_PAGE_BYTES:
         raise HTTPException(413, "that page is too large to analyze")
     cands, warnings = (analyze_detail if body.kind == "detail" else analyze_listing)(html, base)
-    return {"candidates": [c.as_dict() for c in cands], "warnings": warnings, "kind": body.kind}
+    return {"candidates": [c.as_dict() for c in cands], "warnings": warnings, "kind": body.kind, "rendered": rendered,
+            # nothing found on a static fetch of a page that looks script-driven: the UI offers "Try with the browser"
+            "suggest_browser": (not cands) and not rendered and looks_script_driven(html)}
 
 
 @router.post("/discover")

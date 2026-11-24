@@ -4,7 +4,7 @@ import type { ToastFn } from "../App";
 import { SelectorAssistant } from "../components/SelectorAssistant";
 import { Empty, Icon, PageHead } from "../ui";
 
-const EMPTY = { name: "", url: "", mode: "auto", interval_minutes: 60, cron: "", user_agent: "", selectors: "{}" };
+const EMPTY = { name: "", url: "", mode: "auto", interval_minutes: 60, cron: "", user_agent: "", selectors: "{}", render: "static", wait_selector: "" };
 const SEL_EXAMPLE = '{\n  "item": "tr.row",\n  "title": "a.title",\n  "link": "a.title@href",\n  "magnet": "a.magnet@href",\n  "size": ".size",\n  "seeders": ".seeds",\n  "leechers": ".leech"\n}';
 const SEL_TWO_LEVEL = '{\n  "item": "div.entry",\n  "title": "a.title",\n  "link": "a.title@href",\n  "detail": {\n    "item": "div.version",\n    "title": ".name",\n    "magnet": "a.magnet@href",\n    "torrent": "a.torrent@href",\n    "size": ".size",\n    "seeders": ".seeds"\n  }\n}';
 const MODES: Record<string, string> = { auto: "Auto (feed, else HTML)", feed: "Feed only", html: "HTML only" };
@@ -15,15 +15,16 @@ export function Sources({ notify }: { notify: ToastFn }) {
   const [editing, setEditing] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
   const [scanning, setScanning] = useState<number | null>(null);
+  const [browserEnabled, setBrowserEnabled] = useState(false);
   const load = () => api<Source[]>("/api/sources").then(setList);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api<{ browser_enabled: boolean }>("/api/settings").then((r) => setBrowserEnabled(r.browser_enabled)).catch(() => {}); }, []);
   const set = (p: Partial<typeof EMPTY>) => setForm((f) => ({ ...f, ...p }));
 
   const save = async () => {
     let selectors: Record<string, string>;
     try { selectors = JSON.parse(form.selectors || "{}"); } catch { return notify("Selectors must be valid JSON", true); }
     try {
-      await api(editing ? `/api/sources/${editing}` : "/api/sources", editing ? "PUT" : "POST", { ...form, selectors, cron: form.cron || null });
+      await api(editing ? `/api/sources/${editing}` : "/api/sources", editing ? "PUT" : "POST", { ...form, selectors, cron: form.cron || null, wait_selector: form.render === "browser" && form.wait_selector ? form.wait_selector : null });
       setForm(EMPTY); setEditing(null); setOpen(false); load(); notify("Source saved");
     } catch (e) { notify((e as Error).message, true); }
   };
@@ -36,7 +37,8 @@ export function Sources({ notify }: { notify: ToastFn }) {
   const startEdit = (s: Source, mode?: string) => {
     setEditing(s.id); setOpen(true);
     setForm({ name: s.name, url: s.url, mode: mode ?? s.mode, interval_minutes: s.interval_minutes, cron: s.cron ?? "", user_agent: s.user_agent,
-      selectors: Object.keys(s.selectors).length ? JSON.stringify(s.selectors, null, 2) : "{}" });
+      selectors: Object.keys(s.selectors).length ? JSON.stringify(s.selectors, null, 2) : "{}",
+      render: s.render ?? "static", wait_selector: s.wait_selector ?? "" });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const scan = async (id: number) => {
@@ -58,11 +60,24 @@ export function Sources({ notify }: { notify: ToastFn }) {
             <label className="field">Name<input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="My tracker" /></label>
             <label className="field">Site URL<input value={form.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://example.org/" /></label>
             <label className="field">Mode<select value={form.mode} onChange={(e) => set({ mode: e.target.value })}>{Object.entries(MODES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+            <label className="field">Fetch pages with
+              <select value={form.render} onChange={(e) => set({ render: e.target.value })}>
+                <option value="static">Plain HTTP (fast, default)</option>
+                <option value="browser">Browser (for JavaScript sites)</option>
+              </select>
+              {form.render === "browser" && !browserEnabled && <span className="hint">The browser is off: enable it in Settings → Integrations and start the service.</span>}
+            </label>
+            {form.render === "browser" && (
+              <label className="field">Wait for element <span className="hint">optional CSS selector that appears once the list has loaded</span>
+                <input className="mono" placeholder="li.row" value={form.wait_selector} onChange={(e) => set({ wait_selector: e.target.value })} />
+              </label>
+            )}
             <label className="field">Scan every (minutes)<input type="number" min={1} value={form.interval_minutes} onChange={(e) => set({ interval_minutes: Number(e.target.value) })} /></label>
             <label className="field">Cron <span className="hint">overrides interval</span><input className="mono" placeholder="*/30 * * * *" value={form.cron} onChange={(e) => set({ cron: e.target.value })} /></label>
             <label className="field">User-Agent <span className="hint">blank = default</span><input value={form.user_agent} onChange={(e) => set({ user_agent: e.target.value })} /></label>
             <div className="field wide">
-              <SelectorAssistant url={form.url} userAgent={form.user_agent} notify={notify}
+              <SelectorAssistant url={form.url} userAgent={form.user_agent} notify={notify} browserEnabled={browserEnabled}
+                render={form.render} waitSelector={form.wait_selector} setFetch={(render, wait) => set({ render, wait_selector: wait })}
                 current={(() => { try { return JSON.parse(form.selectors || "{}"); } catch { return {}; } })()}
                 onApply={(sel) => { set({ selectors: JSON.stringify(sel, null, 2), mode: form.mode === "feed" ? "html" : form.mode }); }} />
             </div>
@@ -89,7 +104,7 @@ export function Sources({ notify }: { notify: ToastFn }) {
             return (
               <article key={s.id} className="card source">
                 <div className="source-main">
-                  <div className="title-row"><span className={`dot ${!s.last_status ? "muted" : bad ? "bad" : "good"}`} /><h3>{s.name}</h3><span className="chip ghost">{MODES[s.mode] ?? s.mode}</span></div>
+                  <div className="title-row"><span className={`dot ${!s.last_status ? "muted" : bad ? "bad" : "good"}`} /><h3>{s.name}</h3><span className="chip ghost">{MODES[s.mode] ?? s.mode}</span>{s.render === "browser" && <span className="chip">browser</span>}</div>
                   <p className="url mono">{s.url}</p>
                   {needsSelectors && (
                     <div className="note warn-note"><Icon name="alert" size={16} /><span>No feed was found for this site, so it can only be read from its HTML. Add the CSS selectors that point at each entry and its title.</span>
