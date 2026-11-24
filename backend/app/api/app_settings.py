@@ -84,7 +84,24 @@ def _test_telegram() -> str:
     return f"Sent a test message as @{me.json()['result'].get('username', 'bot')}"
 
 
-TESTS = {"tmdb": _test_tmdb, "jellyfin": _test_jellyfin, "telegram": _test_telegram}
+def _test_browser() -> str:
+    if not settings.browser_enabled:
+        raise RuntimeError("browser rendering is switched off - turn it on and save first")
+    try:
+        r = httpx.get(f"{settings.browser_url.rstrip('/')}/selftest", headers={"X-Browser-Token": settings.browser_token},
+                      timeout=settings.browser_timeout_s + 15)
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"cannot reach the browser service at {settings.browser_url}: start it with "
+                           "docker compose -f deploy/docker-compose.yml --profile browser up -d --build") from e
+    if r.status_code in (401, 503):
+        raise RuntimeError("the service rejected the token (Browser token must equal BROWSER_TOKEN in the controller's .env)")
+    if r.status_code != 200:
+        detail = r.json().get("detail", r.text[:120]) if r.headers.get("content-type", "").startswith("application/json") else r.text[:120]
+        raise RuntimeError(f"the browser service reported a problem: {detail}")
+    return f"Browser works (Chromium {r.json().get('chromium', '?')}), JavaScript ran"
+
+
+TESTS = {"tmdb": _test_tmdb, "jellyfin": _test_jellyfin, "telegram": _test_telegram, "browser": _test_browser}
 
 
 @router.post("/test/{name}")

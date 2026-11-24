@@ -45,6 +45,13 @@ FIELDS: tuple[Field, ...] = (
     Field("tmdb_api_key", "TMDB API key", "integrations", "secret", "Posters, overviews and anime season mapping."),
     Field("jellyfin_url", "Jellyfin URL", "integrations", "url", "e.g. http://192.168.0.10:8096"),
     Field("jellyfin_api_key", "Jellyfin API key", "integrations", "secret", "Dashboard → Advanced → API Keys."),
+    Field("browser_enabled", "Render JavaScript pages with a browser", "integrations", "bool",
+          help="Optional. Lets sources that build their list with JavaScript be analyzed and scanned. Needs the browser "
+               "service (docker compose --profile browser)."),
+    Field("browser_url", "Browser service URL", "integrations", "url", "Default http://browser:8100 (inside Docker)."),
+    Field("browser_token", "Browser service token", "integrations", "secret",
+          "Must equal BROWSER_TOKEN in the controller's .env (the service reads it from there)."),
+    Field("browser_timeout_s", "Browser page timeout (s)", "integrations", "int", min=5, max=120),
     # Telegram
     Field("telegram_enabled", "Enable Telegram bot", "telegram", "bool"),
     Field("telegram_bot_token", "Bot token", "telegram", "secret", "From @BotFather."),

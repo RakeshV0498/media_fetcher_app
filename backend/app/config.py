@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     node_pi5_qbit_url: str = ""
     node_pi4_url: str = ""
     node_pi4_qbit_url: str = ""
+    browser_enabled: bool = False
+    browser_url: str = "http://browser:8100"
+    browser_token: str = ""
+    browser_timeout_s: int = 30
     min_free_reserve_gb: int = 5
     jellyfin_url: str = ""
     jellyfin_api_key: str = ""

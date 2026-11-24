@@ -1,4 +1,4 @@
-# Controller only (run on the Pi 5). Download nodes come in step 6.
+# Controller (run on the Pi 5). Download nodes: docker-compose.node*.yml.
 services:
   controller:
     build:
@@ -8,3 +8,18 @@ services:
     ports: ["8000:8000"]
     volumes: ["../data:/app/backend/data"]
     restart: unless-stopped
+
+  # OPTIONAL: renders JavaScript-built pages for the source assistant and scans. Off unless you ask for it:
+  #   docker compose -f deploy/docker-compose.yml --profile browser up -d --build
+  # then turn it on in Settings -> Integrations. Set BROWSER_TOKEN (any long random string) in ../.env first.
+  browser:
+    profiles: ["browser"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.browser
+    env_file: ../.env          # provides BROWSER_TOKEN (shared with the controller)
+    init: true
+    mem_limit: 768m
+    shm_size: 256m
+    restart: unless-stopped
+    # no published ports: only the controller reaches it over the compose network

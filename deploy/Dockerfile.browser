@@ -1,0 +1,16 @@
+# Optional JavaScript-rendering service (Playwright + the distro's Chromium). Build context = repo root.
+# Uses Debian's chromium (available for arm64, smaller than Playwright's bundled browser); if that ever misbehaves on
+# your Pi, replace the apt line with `playwright install --with-deps chromium` and unset CHROMIUM_PATH.
+FROM python:3.12-slim-bookworm
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends chromium fonts-liberation \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --create-home --uid 1000 browser
+WORKDIR /srv
+COPY browser/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY browser/browsersvc ./browsersvc
+ENV CHROMIUM_PATH=/usr/bin/chromium PYTHONUNBUFFERED=1
+USER browser
+EXPOSE 8100
+CMD ["uvicorn", "browsersvc.main:app", "--host", "0.0.0.0", "--port", "8100"]
