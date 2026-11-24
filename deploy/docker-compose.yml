@@ -1,4 +1,10 @@
 # Controller (run on the Pi 5). Download nodes: docker-compose.node*.yml.
+x-logging: &default-logging   # rotate container logs so they can never fill the SD card
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   controller:
     build:
@@ -8,6 +14,7 @@ services:
     ports: ["8000:8000"]
     volumes: ["../data:/app/backend/data"]
     restart: unless-stopped
+    logging: *default-logging
 
   # OPTIONAL: renders JavaScript-built pages for the source assistant and scans. Off unless you ask for it:
   #   docker compose -f deploy/docker-compose.yml --profile browser up -d --build
@@ -22,4 +29,5 @@ services:
     mem_limit: 768m
     shm_size: 256m
     restart: unless-stopped
+    logging: *default-logging
     # no published ports: only the controller reaches it over the compose network

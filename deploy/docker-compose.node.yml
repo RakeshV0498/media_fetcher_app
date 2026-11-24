@@ -1,5 +1,11 @@
 # Download node (one per Pi). Run:  docker compose -f deploy/docker-compose.node.yml --env-file node.env up -d
 # qBittorrent shares gluetun's network namespace => if the VPN is down there is NO connectivity (kill switch).
+x-logging: &default-logging   # rotate container logs so they can never fill the SD card
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   gluetun:
     image: qmcgaw/gluetun:v3
@@ -21,6 +27,7 @@ services:
     ports:
       - "8080:8080"   # qBittorrent WebUI (published via gluetun's namespace)
     restart: unless-stopped
+    logging: *default-logging
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
@@ -37,6 +44,7 @@ services:
       # Mount host paths at the SAME path inside the container so content paths match the agent's:
       - ${DOWNLOADS_DIR:-/mnt/downloads}:${DOWNLOADS_DIR:-/mnt/downloads}
     restart: unless-stopped
+    logging: *default-logging
 
   agent:
     build: {context: .., dockerfile: node_agent/Dockerfile}
@@ -55,6 +63,7 @@ services:
       - "8800:8800"   # controller -> agent (LAN only; protected by NODE_AGENT_TOKEN)
     depends_on: [gluetun]
     restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   qbit-config:

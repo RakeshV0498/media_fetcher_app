@@ -154,6 +154,11 @@ Re-run the node `up -d --build` command only if node files changed. The database
 
 ## 11. Troubleshooting
 
+Housekeeping: all services rotate their logs (10 MB x 3 files each). To reclaim disk after rebuilds, run
+`docker builder prune -f --keep-storage 1GB` (old build cache only). Never use `docker volume prune` or `--remove-orphans`: the
+qBittorrent settings live in a volume and the node stack shares the controller's project name.
+
+
 | Symptom | What to do |
 |---|---|
 | App will not load | `docker logs deploy-controller-1 --tail 50`; the last lines say why. |
@@ -162,6 +167,7 @@ Re-run the node `up -d --build` command only if node files changed. The database
 | Approve refused: disk space | The target disk is too full. Free some space, or lower *Keep free disk space* in Settings, Downloads. |
 | Approve refused: no node agent | The node's agent URL is not set or the agent is not running. |
 | Login fails after editing `.env` | Keep the single quotes around `AUTH_PASSWORD_HASH`, then `--force-recreate`. |
+| `docker inspect -f '{{.HostConfig.Memory}}' deploy-browser-1` prints `0` | Some Pi kernels boot with `cgroup_disable=memory`, so Docker ignores every memory limit (the browser's 768 MB cap included; it still renders one page at a time, which bounds its use). To enforce limits, replace `cgroup_disable=memory` with `cgroup_memory=1 cgroup_enable=memory` in `/boot/firmware/cmdline.txt` and reboot. **A reboot restarts everything else on that Pi** (Jellyfin, Pi-hole, ...), so pick a quiet time. |
 | Browser image build "Killed" / exit code 137 | The Pi ran out of memory while building. Build it alone (`docker compose -f deploy/docker-compose.yml --profile browser up -d --build browser`), and if it still dies, stop other heavy containers for the build or add swap, then retry. |
 | Browser test says 502 | The image is missing `libatomic1` (fixed in the repo); `git pull` and rebuild: `... --profile browser up -d --build browser`. |
 | Source scan error "No feed was found" | Press **Add selectors** on the source, then **Analyze page**. |
