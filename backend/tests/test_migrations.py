@@ -38,13 +38,15 @@ def old_db(tmp_path):
 
 def check(db: Path):
     c = sqlite3.connect(db)
-    assert c.execute("select * from alembic_version").fetchall() == [("0009",)]
+    assert c.execute("select * from alembic_version").fetchall() == [("0010",)]
     assert c.execute("select title, detail_url from releases").fetchall() == [("Sintel", None)]
     assert c.execute("select count(*) from variants").fetchone() == (1,)
     assert c.execute("select count(*) from downloads").fetchone() == (1,)
     assert c.execute("pragma foreign_key_check").fetchall() == []
     assert c.execute("select name from sqlite_master where name like '%alembic_tmp%'").fetchall() == []
     assert c.execute("select final_path from tags").fetchone() == ("/media/movies/English",)  # untouched
+    # existing sources keep working: they fetch with plain HTTP unless the user switches them
+    assert c.execute("select render, wait_selector from sources").fetchall() == [("static", None)]
     c.close()
 
 
@@ -68,6 +70,8 @@ def test_upgrade_recovers_from_a_leftover_tmp_table(old_db):
 def test_upgrade_is_repeatable_and_downgrade_works(old_db):
     assert alembic(old_db, "upgrade", "head").returncode == 0
     assert alembic(old_db, "upgrade", "head").returncode == 0                   # no-op the second time
+    assert alembic(old_db, "downgrade", "0009").returncode == 0
+    assert alembic(old_db, "upgrade", "head").returncode == 0
     assert alembic(old_db, "downgrade", "0008").returncode == 0
     assert alembic(old_db, "upgrade", "head").returncode == 0
     check(old_db)

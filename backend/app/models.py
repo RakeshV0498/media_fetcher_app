@@ -46,6 +46,8 @@ class Source(Base):
     cron: Mapped[str | None] = mapped_column(String, nullable=True)
     enabled: Mapped[bool] = mapped_column(default=True)
     default_tag_id: Mapped[int | None] = mapped_column(ForeignKey("tags.id"), nullable=True)
+    render: Mapped[str] = mapped_column(String, default="static", server_default="static")  # static | browser
+    wait_selector: Mapped[str | None] = mapped_column(String, nullable=True)  # browser mode: wait for this element
     last_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status: Mapped[str] = mapped_column(String, default="")
 

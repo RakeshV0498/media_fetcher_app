@@ -18,7 +18,8 @@ from ..parsing.parser import parse_size, parse_title
 from ..parsing.tagging import suggest_tag_name
 from .discovery import discover_feed
 from .feed import fetch_feed
-from .html import fetch_html
+from . import browser_client
+from .html import NO_SELECTORS_MSG, parse_html
 from .types import RawItem
 
 _locks: dict[int, threading.Lock] = {}
@@ -28,6 +29,24 @@ _HASH = re.compile(r"btih:([0-9a-zA-Z]{32,40})")
 def make_client(source: Source) -> httpx.Client:
     ua = source.user_agent or settings.user_agent
     return httpx.Client(headers={"User-Agent": ua}, timeout=20, follow_redirects=True)
+
+
+def get_html(source: Source, url: str, client: httpx.Client) -> tuple[str, str]:
+    """The page's HTML and its final URL, fetched the way this source asks for: plain HTTP, or a real browser
+    (for sites that build their list with JavaScript)."""
+    if source.render == "browser":
+        page = browser_client.render(url, wait_selector=source.wait_selector, user_agent=source.user_agent)
+        return page.html, page.final_url
+    r = client.get(url)
+    r.raise_for_status()
+    return r.text, str(r.url)
+
+
+def fetch_items(source: Source, url: str, selectors: dict, client: httpx.Client) -> list[RawItem]:
+    if not selectors.get("item") or not selectors.get("title"):
+        raise ValueError(NO_SELECTORS_MSG)  # checked first so a misconfigured source never costs a browser render
+    html, final_url = get_html(source, url, client)
+    return parse_html(html, final_url, selectors)
 
 
 def _ident(item: RawItem) -> str:
@@ -109,7 +128,7 @@ def scan_source(db: Session, source: Source, client: httpx.Client | None = None,
         if source.mode != "html" and feed_url:
             items = fetch_feed(client, feed_url)
         else:
-            items = fetch_html(client, source.url, source.selectors or {})
+            items = fetch_items(source, source.url, source.selectors or {}, client)
         new = upsert_items(db, source, items)
         status = f"ok: {len(items)} items, {new} new"
     except Exception as exc:  # recorded for the UI; never crash the scheduler

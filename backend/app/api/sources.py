@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
@@ -25,7 +25,8 @@ class SourceIn(BaseModel):
     cron: str | None = None
     enabled: bool = True
     default_tag_id: int | None = None
-
+    render: Literal["static", "browser"] = "static"
+    wait_selector: str | None = None
 
     @field_validator("selectors")
     @classmethod

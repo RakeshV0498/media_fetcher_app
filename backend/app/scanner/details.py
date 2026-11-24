@@ -8,8 +8,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from ..models import Release, Source
-from .html import fetch_html
-from .runner import add_variant, make_client
+from .runner import add_variant, fetch_items, make_client
 
 
 def _same_host(a: str, b: str) -> bool:
@@ -28,7 +27,7 @@ def load_versions(db: Session, rel: Release, client: httpx.Client | None = None)
     own = client is None
     client = client or make_client(src)
     try:
-        items = fetch_html(client, rel.detail_url, cfg)
+        items = fetch_items(src, rel.detail_url, cfg, client)
     finally:
         if own:
             client.close()
